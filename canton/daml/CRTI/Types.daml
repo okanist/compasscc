@@ -1,0 +1,48 @@
+module CRTI.Types where
+
+import DA.Time (Time)
+
+data PartyRole
+  = InstitutionDesk
+  | Operator
+  | RegulatorAuditor
+  deriving (Eq, Show)
+
+data ContributionType
+  = SelfReported
+  | SystemSigned
+  | OracleCustodianAttested
+  deriving (Eq, Show)
+
+data ScenarioType
+  = Repo
+  | Treasury
+  | RepoWithTreasuryCollateral
+  deriving (Eq, Show)
+
+data ConfidenceTier
+  = LowConfidence
+  | MediumConfidence
+  | HighConfidence
+  deriving (Eq, Show)
+
+data TokenizedAssetId = TokenizedAssetId with
+  assetId : Text
+  issuer : Party
+  symbol : Text
+  scenario : ScenarioType
+  deriving (Eq, Show)
+
+data DeterministicScore = DeterministicScore with
+  liquidityScore : Decimal
+  benchmarkDelta : Decimal
+  benchmarkReliability : Decimal
+  confidenceTier : ConfidenceTier
+  deriving (Eq, Show)
+
+data AuditMetadata = AuditMetadata with
+  attestationReference : Text
+  processedAt : Time
+  rawRetentionPolicy : Text
+  deriving (Eq, Show)
+

@@ -1,0 +1,16 @@
+module CRTI.Request where
+
+import CRTI.Types
+
+template IntelligenceRequest
+  with
+    requester : Party
+    operator : Party
+    regulator : Party
+    scenario : ScenarioType
+    benchmarkReference : Text
+    requestReason : Text
+  where
+    signatory requester
+    observer operator, regulator
+

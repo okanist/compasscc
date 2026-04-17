@@ -1,0 +1,96 @@
+module Main where
+
+import CRTI.Asset
+import CRTI.Benchmark
+import CRTI.Contribution
+import CRTI.Request
+import CRTI.Result
+import CRTI.Types
+import Daml.Script
+
+setup : Script ()
+setup = script do
+  issuer <- allocatePartyWithHint "Issuer" (PartyIdHint "issuer")
+  operator <- allocatePartyWithHint "Operator" (PartyIdHint "operator")
+  custodian <- allocatePartyWithHint "Custodian" (PartyIdHint "custodian")
+  regulator <- allocatePartyWithHint "Regulator" (PartyIdHint "regulator")
+  institution <- allocatePartyWithHint "InstitutionDesk" (PartyIdHint "institution")
+
+  let assetId =
+        TokenizedAssetId
+          with
+            assetId = "UST-REPO-001"
+            issuer = issuer
+            symbol = "UST"
+            scenario = RepoWithTreasuryCollateral
+
+  let score =
+        DeterministicScore
+          with
+            liquidityScore = 69.1
+            benchmarkDelta = -4.7
+            benchmarkReliability = 91.4
+            confidenceTier = HighConfidence
+
+  now <- getTime
+
+  let audit =
+        AuditMetadata
+          with
+            attestationReference = "TEE-ATTEST-Q2-REPONET-014"
+            processedAt = now
+            rawRetentionPolicy = "none"
+
+  submit issuer do
+    createCmd TokenizedAsset with
+      issuer = issuer
+      operator = operator
+      custodian = custodian
+      asset = assetId
+      description = "Demo repo and treasury collateral asset"
+
+  submit institution do
+    createCmd BenchmarkContribution with
+      contributor = institution
+      operator = operator
+      regulator = regulator
+      scenario = RepoWithTreasuryCollateral
+      contributionType = SystemSigned
+      reputationScore = 0.82
+      qualityWeight = 1.15
+      selectedFields = ["repo notional range", "liquidity buffer ratio", "average maturity bucket"]
+      campaignName = "Q2 Repo Liquidity and Treasury Readiness Campaign"
+      policySummary = "Selected fields only"
+
+  submit operator do
+    createCmd Benchmark with
+      publisher = operator
+      operator = operator
+      regulator = regulator
+      scenario = RepoWithTreasuryCollateral
+      contributorCount = 24
+      trustWeightedScore = 88.6
+      benchmarkReliability = 91.4
+      liquidityDispersion = 12.4
+      benchmarkReference = "BMK-Q2-REPO-2026"
+
+  submit institution do
+    createCmd IntelligenceRequest with
+      requester = institution
+      operator = operator
+      regulator = regulator
+      scenario = RepoWithTreasuryCollateral
+      benchmarkReference = "BMK-Q2-REPO-2026"
+      requestReason = "Institution-scoped comparison"
+
+  submit operator do
+    createCmd IntelligenceResult with
+      recipient = institution
+      operator = operator
+      regulator = regulator
+      benchmarkReference = "BMK-Q2-REPO-2026"
+      score = score
+      explainableSummary = "Deterministic score produced off-ledger and restated locally for audit handoff."
+      audit = audit
+
+  pure ()

@@ -1,0 +1,19 @@
+module CRTI.Benchmark where
+
+import CRTI.Types
+
+template Benchmark
+  with
+    publisher : Party
+    operator : Party
+    regulator : Party
+    scenario : ScenarioType
+    contributorCount : Int
+    trustWeightedScore : Decimal
+    benchmarkReliability : Decimal
+    liquidityDispersion : Decimal
+    benchmarkReference : Text
+  where
+    signatory publisher, operator
+    observer regulator
+

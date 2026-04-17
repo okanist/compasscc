@@ -1,0 +1,29 @@
+Compass DAML model intent
+=========================
+
+This package is a clean architectural skeleton for Canton Repo & Treasury Intelligence (CRTI).
+
+Intended flow:
+
+1. An operator defines a benchmark contribution campaign for a repo or treasury scenario.
+2. An institution contributes selected fields rather than a full raw position.
+3. Contribution metadata captures source quality such as self-reported, system-signed, or custodian-attested.
+4. A confidential processing service computes deterministic benchmark outputs off-ledger.
+5. A benchmark record is published with reliability and contributor count.
+6. An institution requests its own position intelligence relative to the benchmark.
+7. A result record is created as an auditable output on Canton.
+
+Why the model is simple:
+
+- The goal is to show role-based workflow and selective visibility.
+- This is not a full production implementation.
+- The confidential compute step is represented architecturally rather than implemented on-ledger.
+
+Core concepts:
+
+- TokenizedAsset: repo or treasury-related asset reference
+- BenchmarkContribution: selected contribution fields and trust metadata
+- Benchmark: aggregate benchmark publication
+- IntelligenceRequest: institution-scoped request for comparison output
+- IntelligenceResult: auditable result record
+

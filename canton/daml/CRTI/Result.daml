@@ -1,0 +1,17 @@
+module CRTI.Result where
+
+import CRTI.Types
+
+template IntelligenceResult
+  with
+    recipient : Party
+    operator : Party
+    regulator : Party
+    benchmarkReference : Text
+    score : DeterministicScore
+    explainableSummary : Text
+    audit : AuditMetadata
+  where
+    signatory recipient, operator
+    observer regulator
+

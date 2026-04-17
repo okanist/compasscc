@@ -1,0 +1,15 @@
+module CRTI.Asset where
+
+import CRTI.Types
+
+template TokenizedAsset
+  with
+    issuer : Party
+    operator : Party
+    custodian : Party
+    asset : TokenizedAssetId
+    description : Text
+  where
+    signatory issuer
+    observer operator, custodian
+

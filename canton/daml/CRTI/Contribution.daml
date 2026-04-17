@@ -1,0 +1,24 @@
+module CRTI.Contribution where
+
+import CRTI.Types
+
+template BenchmarkContribution
+  with
+    contributor : Party
+    operator : Party
+    regulator : Party
+    scenario : ScenarioType
+    contributionType : ContributionType
+    reputationScore : Decimal
+    qualityWeight : Decimal
+    selectedFields : [Text]
+    campaignName : Text
+    policySummary : Text
+  where
+    signatory contributor, operator
+    observer regulator
+
+    choice MarkAccepted : ContractId BenchmarkContribution
+      controller operator
+      do create this with policySummary = policySummary <> " | accepted"
+
