@@ -9,14 +9,30 @@ import { ProcessingPage } from "./pages/ProcessingPage";
 import { BenchmarkPage } from "./pages/BenchmarkPage";
 import { PositionPage } from "./pages/PositionPage";
 
+type ThemeMode = "night" | "day";
+
 export default function App() {
   const [activeNav, setActiveNav] = useState<NavKey>("overview");
   const [role, setRole] = useState<Role>("Institution Desk");
   const [data, setData] = useState<ApiPayload>(fallbackData);
+  const [theme, setTheme] = useState<ThemeMode>("night");
 
   useEffect(() => {
     void loadCompassData().then(setData);
   }, []);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("compass-theme");
+
+    if (savedTheme === "day" || savedTheme === "night") {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("compass-theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   let page = <OverviewPage data={data.overview} />;
 
@@ -31,9 +47,15 @@ export default function App() {
   }
 
   return (
-    <AppShell activeNav={activeNav} onNavigate={setActiveNav} role={role} onRoleChange={setRole}>
+    <AppShell
+      activeNav={activeNav}
+      onNavigate={setActiveNav}
+      role={role}
+      onRoleChange={setRole}
+      theme={theme}
+      onToggleTheme={() => setTheme((currentTheme) => (currentTheme === "night" ? "day" : "night"))}
+    >
       {page}
     </AppShell>
   );
 }
-
