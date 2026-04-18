@@ -9,7 +9,10 @@ interface PositionPageProps {
 export function PositionPage({ data }: PositionPageProps) {
   return (
     <div className="page-grid">
-      <SectionCard title="My Position Intelligence" subtitle="Institution-scoped comparison for local decision support and audit handoff.">
+      <SectionCard
+        title="Institution Metrics"
+        subtitle="Institution-scoped comparison for local decision support and audit handoff."
+      >
         <div className="metric-list">
           {data.metrics.map((metric) => (
             <MetricRow key={metric.label} label={metric.label} value={metric.value} />

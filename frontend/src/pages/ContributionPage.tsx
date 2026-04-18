@@ -9,7 +9,7 @@ export function ContributionPage({ data }: ContributionPageProps) {
   return (
     <div className="page-grid">
       <SectionCard
-        title="Contribution Campaign"
+        title="Campaign Parameters"
         subtitle="Institutions contribute selected data under policy, and contribution quality directly affects benchmark strength."
       >
         <div className="details-grid">

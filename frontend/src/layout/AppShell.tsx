@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { InstitutionTopBar, type InstitutionTopBarProps } from "../components/InstitutionTopBar";
 import type { NavKey, Role } from "../data/types";
 
 type ThemeMode = "night" | "day";
@@ -10,18 +11,95 @@ interface AppShellProps {
   onRoleChange: (role: Role) => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  topBar: Omit<
+    InstitutionTopBarProps,
+    "role" | "onRoleChange" | "theme" | "onToggleTheme"
+  >;
   children: ReactNode;
 }
 
-const navItems: { key: NavKey; label: string }[] = [
-  { key: "overview", label: "Network Intelligence Overview" },
-  { key: "campaign", label: "Contribution Campaign" },
-  { key: "processing", label: "Confidential Processing" },
-  { key: "benchmark", label: "Benchmark Intelligence" },
-  { key: "position", label: "My Position Intelligence" }
+const navItems: { key: NavKey; label: string; icon: ReactNode }[] = [
+  {
+    key: "overview",
+    label: "Intelligence Overview",
+    icon: (
+      <svg viewBox="0 0 24 24" role="presentation">
+        <path
+          d="M12 3.75 19.25 7.5v9L12 20.25 4.75 16.5v-9L12 3.75Zm0 0v16.5M4.75 7.5 12 12l7.25-4.5"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.55"
+        />
+      </svg>
+    )
+  },
+  {
+    key: "campaign",
+    label: "Contribute Data",
+    icon: (
+      <svg viewBox="0 0 24 24" role="presentation">
+        <path
+          d="M7 5.75h10a1.75 1.75 0 0 1 1.75 1.75v9A1.75 1.75 0 0 1 17 18.25H7A1.75 1.75 0 0 1 5.25 16.5v-9A1.75 1.75 0 0 1 7 5.75Zm3.5-2v4.5m3-4.5v4.5M8.5 11.25h7m-7 3h4"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.55"
+        />
+      </svg>
+    )
+  },
+  {
+    key: "processing",
+    label: "Confidential Processing",
+    icon: (
+      <svg viewBox="0 0 24 24" role="presentation">
+        <path
+          d="M8 10V7.75a4 4 0 1 1 8 0V10m-8 0h8a1.75 1.75 0 0 1 1.75 1.75v6.5A1.75 1.75 0 0 1 16 20H8A1.75 1.75 0 0 1 6.25 18.25v-6.5A1.75 1.75 0 0 1 8 10Z"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.55"
+        />
+      </svg>
+    )
+  },
+  {
+    key: "benchmark",
+    label: "Benchmark & Insights",
+    icon: (
+      <svg viewBox="0 0 24 24" role="presentation">
+        <path
+          d="M6.25 17.75h2.5v-5h-2.5v5Zm4.5 0h2.5V6.25h-2.5v11.5Zm4.5 0h2.5v-8h-2.5v8Z"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.55"
+        />
+      </svg>
+    )
+  },
+  {
+    key: "position",
+    label: "My Position",
+    icon: (
+      <svg viewBox="0 0 24 24" role="presentation">
+        <path
+          d="M12 12a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Zm-6.75 6.25a6.75 6.75 0 0 1 13.5 0"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.55"
+        />
+      </svg>
+    )
+  }
 ];
-
-const roles: Role[] = ["Institution Desk", "Operator", "Regulator / Auditor"];
 
 export function AppShell({
   activeNav,
@@ -30,11 +108,9 @@ export function AppShell({
   onRoleChange,
   theme,
   onToggleTheme,
+  topBar,
   children
 }: AppShellProps) {
-  const nextThemeLabel = theme === "night" ? "Day Mode" : "Night Mode";
-  const themeDescription = theme === "night" ? "Current: Night" : "Current: Day";
-
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -51,7 +127,6 @@ export function AppShell({
               <h1>Canton Repo & Treasury Intelligence</h1>
             </div>
           </div>
-          <p>Privacy-preserving institutional intelligence for repo and treasury activity on Canton.</p>
         </div>
 
         <nav className="nav-list" aria-label="Primary">
@@ -62,101 +137,60 @@ export function AppShell({
               className={item.key === activeNav ? "nav-item nav-item--active" : "nav-item"}
               onClick={() => onNavigate(item.key)}
             >
-              {item.label}
+              <span className="nav-item__icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>
 
-        <div className="sidebar-helper panel">
-          <span className="eyebrow">Why Compass Exists</span>
-          <p>
-            Privacy-first networks protect institutional data, but fragment shared market intelligence.
-            Compass closes that gap with controlled contribution, confidential processing, trust-weighted
-            aggregation, and auditable benchmark outputs on Canton.
-          </p>
+        <div className="sidebar-footer">
+          <div className="sidebar-utility-row" aria-label="Sidebar utilities">
+            <button type="button" className="sidebar-utility-button" aria-label="Notifications">
+              <svg viewBox="0 0 24 24" role="presentation">
+                <path
+                  d="M12 5.5a4 4 0 0 0-4 4v2.25c0 .8-.27 1.58-.77 2.21L6 15.5h12l-1.23-1.54a3.5 3.5 0 0 1-.77-2.21V9.5a4 4 0 0 0-4-4Zm-1.75 12.5a1.75 1.75 0 0 0 3.5 0"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.55"
+                />
+              </svg>
+            </button>
+            <button type="button" className="sidebar-utility-button" aria-label="Settings">
+              <svg viewBox="0 0 24 24" role="presentation">
+                <path
+                  d="M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Zm6 2.5-.92-.53a.8.8 0 0 1-.38-.88l.2-.97-1.4-1.4-.97.2a.8.8 0 0 1-.88-.38L13.12 7h-2.24l-.53.92a.8.8 0 0 1-.88.38l-.97-.2-1.4 1.4.2.97a.8.8 0 0 1-.38.88L6 12l.92.53a.8.8 0 0 1 .38.88l-.2.97 1.4 1.4.97-.2a.8.8 0 0 1 .88.38l.53.92h2.24l.53-.92a.8.8 0 0 1 .88-.38l.97.2 1.4-1.4-.2-.97a.8.8 0 0 1 .38-.88L18 12Z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.45"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="sidebar-profile">
+            <div className="sidebar-profile__avatar">AB</div>
+            <div>
+              <strong>Alpha Bank</strong>
+              <span>Institution Desk</span>
+            </div>
+          </div>
         </div>
       </aside>
 
       <div className="content-column">
-        <header className="topbar">
-          <div>
-            <span className="eyebrow">Compass</span>
-            <h2>Institutional Intelligence Console</h2>
-          </div>
-
-          <div className="topbar-controls">
-            <div className="topbar-status panel">
-              <span className="topbar-status__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="presentation">
-                  <path
-                    d="M7 10V7a5 5 0 0 1 10 0v3m-9 0h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1.6"
-                  />
-                </svg>
-              </span>
-              <div>
-                <strong>Confidential Processing</strong>
-                <span>Raw data retention: none</span>
-              </div>
-            </div>
-
-            <button type="button" className="theme-switch panel" onClick={onToggleTheme} aria-label={nextThemeLabel}>
-              <span className="theme-switch__icon" aria-hidden="true">
-                {theme === "night" ? (
-                  <svg viewBox="0 0 24 24" role="presentation">
-                    <path
-                      d="M12 5V2m0 20v-3m7-7h3M2 12h3m11.95 4.95 2.12 2.12M4.93 4.93l2.12 2.12m9.9-2.12-2.12 2.12M7.05 16.95l-2.12 2.12M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="1.7"
-                    />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" role="presentation">
-                    <path
-                      d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8a9 9 0 1 0 11.4 11.4Z"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="1.7"
-                    />
-                  </svg>
-                )}
-              </span>
-              <span className="theme-switch__text">
-                <strong>{nextThemeLabel}</strong>
-                <span>{themeDescription}</span>
-              </span>
-              <span className={`theme-switch__track theme-switch__track--${theme}`} aria-hidden="true">
-                <span className="theme-switch__thumb" />
-              </span>
-            </button>
-
-            <div className="role-switcher panel">
-              <label htmlFor="role-select">Active Role</label>
-              <select
-                id="role-select"
-                value={role}
-                onChange={(event) => onRoleChange(event.target.value as Role)}
-              >
-                {roles.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <span>Demo Entity: Alpha Bank</span>
-            </div>
-          </div>
-        </header>
-
+        <InstitutionTopBar
+          {...topBar}
+          role={role}
+          onRoleChange={onRoleChange}
+          theme={theme}
+          onToggleTheme={onToggleTheme}
+        />
         <main className="page-content">{children}</main>
       </div>
     </div>

@@ -9,11 +9,9 @@ interface ProcessingPageProps {
 export function ProcessingPage({ data }: ProcessingPageProps) {
   return (
     <div className="page-grid">
-      <section className="hero-panel panel">
-        <span className="eyebrow">Confidential Processing</span>
-        <h2>{data.headline}</h2>
+      <SectionCard title="Benchmark Boundary Summary" subtitle={data.headline}>
         <p>{data.body}</p>
-      </section>
+      </SectionCard>
 
       <SectionCard title="Confidential Compute Status" subtitle="Deterministic processing inside a confidential boundary.">
         <div className="metric-list">

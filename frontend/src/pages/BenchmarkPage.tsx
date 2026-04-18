@@ -12,7 +12,10 @@ export function BenchmarkPage({ data }: BenchmarkPageProps) {
 
   return (
     <div className="page-grid">
-      <SectionCard title="Benchmark Intelligence" subtitle="Aggregate anonymized benchmark results for the selected collateral and settlement scenario.">
+      <SectionCard
+        title="Scenario Selection"
+        subtitle="Aggregate anonymized benchmark results for the selected collateral and settlement scenario."
+      >
         <div className="selector-row">
           <label htmlFor="scenario-select">Collateral / Settlement Scenario</label>
           <select
