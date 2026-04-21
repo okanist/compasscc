@@ -31,11 +31,11 @@ const contributionImpact = {
 } as const;
 
 const eligibilityRules = [
-  { label: "Contribution matches active campaign field requirements", status: "Satisfied" },
-  { label: "Minimum reputation threshold satisfied", status: "Satisfied" },
-  { label: "Submission falls within attestation window", status: "Satisfied" },
-  { label: "Confidence tier meets benchmark policy", status: "Satisfied" },
-  { label: "Confidential processing enabled", status: "Satisfied" },
+  { label: "Contribution matches active campaign field requirements", status: "Matched" },
+  { label: "Minimum reputation threshold satisfied", status: "Passed" },
+  { label: "Submission falls within attestation window", status: "Valid" },
+  { label: "Confidence tier meets benchmark policy", status: "Qualified" },
+  { label: "Confidential processing enabled", status: "Active" },
   { label: "No raw data retention outside secure boundary", status: "Enforced" }
 ];
 
@@ -146,7 +146,7 @@ export function ContributionPage({ data }: ContributionPageProps) {
           <div className="selected-impact-band" aria-live="polite">
             <div className="selected-impact-band__header">
               <span className="eyebrow">Selected Contribution Impact</span>
-              <strong>{selectedType}</strong>
+              <span className="selected-impact-band__badge">{selectedType}</span>
             </div>
             <div className="impact-metrics">
               <div>
@@ -204,6 +204,11 @@ export function ContributionPage({ data }: ContributionPageProps) {
                 self-reported entries. Out-of-policy contributions may be accepted for review but
                 excluded from final reliability scoring.
               </p>
+              <div className="policy-rule-list" aria-label="Policy scoring rules">
+                <span>Type affects weight</span>
+                <span>Policy gates scoring</span>
+                <span>Out-of-policy remains review-only</span>
+              </div>
             </aside>
           </div>
 
@@ -233,12 +238,14 @@ export function ContributionPage({ data }: ContributionPageProps) {
           </section>
 
           <div className="quality-note">
-            <span className="eyebrow">Why Contribution Quality Matters</span>
-            <p>
-              Compass does not treat all institutional submissions as equally trustworthy.
-              Contribution quality directly affects benchmark strength, attestation coverage, and
-              the confidence of institution-level intelligence outputs.
-            </p>
+            <div>
+              <span className="eyebrow">Why Contribution Quality Matters</span>
+              <p>
+                Compass does not treat all institutional submissions as equally trustworthy.
+                Contribution quality directly affects benchmark strength, attestation coverage, and
+                the confidence of institution-level intelligence outputs.
+              </p>
+            </div>
           </div>
         </div>
       </SectionCard>
