@@ -1,15 +1,13 @@
 import type { ReactNode } from "react";
-import type { Role } from "../data/types";
+import { appRoles, roleLabels, type AppRole } from "../types/roles";
 
 type ThemeMode = "night" | "day";
-
-const roles: Role[] = ["Institution Desk", "Operator", "Regulator / Auditor"];
 
 export interface InstitutionTopBarProps {
   title: string;
   description: string;
-  role: Role;
-  onRoleChange: (role: Role) => void;
+  role: AppRole;
+  onRoleChange: (role: AppRole) => void;
   showRoleSwitcher: boolean;
   theme: ThemeMode;
   onToggleTheme: () => void;
@@ -59,11 +57,11 @@ export function InstitutionTopBar({
               <select
                 id="institution-role-select"
                 value={role}
-                onChange={(event) => onRoleChange(event.target.value as Role)}
+                onChange={(event) => onRoleChange(event.target.value as AppRole)}
               >
-                {roles.map((option) => (
+                {appRoles.map((option) => (
                   <option key={option} value={option}>
-                    {option}
+                    {roleLabels[option]}
                   </option>
                 ))}
               </select>

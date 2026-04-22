@@ -1,0 +1,294 @@
+module CRTI.Workflow where
+
+import CRTI.Types
+import DA.Time (Time)
+
+-- Authoritative workflow state lives here.
+-- Backend analytics, reliability scoring, dispersion, projections, and interpretation generation
+-- remain off-ledger and are synchronized through bridge services.
+
+template Campaign
+  with
+    operator : Party
+    auditor : Party
+    participatingInstitutions : [Party]
+    campaignId : Text
+    title : Text
+    scenario : Scenario
+    status : CampaignStatus
+    submissionWindowStart : Time
+    submissionWindowEnd : Time
+    minReputationThreshold : Decimal
+    confidenceTierRequired : ConfidenceTier
+    teeProcessingEnabled : Bool
+    requestedFields : [Text]
+  where
+    signatory operator
+    observer auditor
+    observer participatingInstitutions
+
+    choice CloseCampaign : ContractId Campaign
+      controller operator
+      do create this with status = Closed
+
+    choice ReopenCampaign : ContractId Campaign
+      controller operator
+      do create this with status = Active
+
+    choice StartProcessing : ContractId Campaign
+      controller operator
+      do create this with status = Processing
+
+    choice ArchiveCampaign : ()
+      controller operator
+      do pure ()
+
+
+template ContributionSubmission
+  with
+    operator : Party
+    auditor : Party
+    institution : Party
+    campaignId : Text
+    submissionId : Text
+    submissionType : SubmissionType
+    confidenceTier : ConfidenceTier
+    payloadHash : Text
+    policyStatus : PolicyStatus
+    reviewStatus : ReviewStatus
+    attestationStatus : AttestationStatus
+    submittedAt : Time
+  where
+    signatory institution
+    observer operator
+    observer auditor
+
+    -- Raw contribution payloads are intentionally off-ledger. The backend stores encrypted
+    -- payloads/projections and writes only hash/reference-friendly metadata here.
+    choice SubmitForReview : ContractId ContributionSubmission
+      controller institution
+      do create this with reviewStatus = UnderReview
+
+    choice MarkNeedsAttestation : ContractId SubmissionReview
+      with
+        notes : Text
+        reviewedAt : Time
+      controller operator
+      do
+        create SubmissionReview with
+          operator = operator
+          auditor = auditor
+          institution = institution
+          submissionId = submissionId
+          reviewDecision = NeedsAttestation
+          notes = notes
+          reviewedAt = reviewedAt
+
+    choice ApproveSubmission : ContractId SubmissionReview
+      with
+        notes : Text
+        reviewedAt : Time
+      controller operator
+      do
+        create SubmissionReview with
+          operator = operator
+          auditor = auditor
+          institution = institution
+          submissionId = submissionId
+          reviewDecision = Approved
+          notes = notes
+          reviewedAt = reviewedAt
+
+    choice RejectSubmission : ContractId SubmissionReview
+      with
+        notes : Text
+        reviewedAt : Time
+      controller operator
+      do
+        create SubmissionReview with
+          operator = operator
+          auditor = auditor
+          institution = institution
+          submissionId = submissionId
+          reviewDecision = Rejected
+          notes = notes
+          reviewedAt = reviewedAt
+
+
+template SubmissionReview
+  with
+    operator : Party
+    auditor : Party
+    institution : Party
+    submissionId : Text
+    reviewDecision : ReviewStatus
+    notes : Text
+    reviewedAt : Time
+  where
+    signatory operator
+    observer institution, auditor
+
+    nonconsuming choice FinalizeReview : ()
+      controller operator
+      do pure ()
+
+
+template ProcessingRun
+  with
+    operator : Party
+    auditor : Party
+    campaignId : Text
+    runId : Text
+    status : ProcessingRunStatus
+    submissionCount : Int
+    validSubmissionCount : Int
+    startedAt : Optional Time
+    finishedAt : Optional Time
+    runtimeMode : Text
+    retentionPolicyStatus : RetentionPolicyStatus
+    attestationRef : Optional Text
+  where
+    signatory operator
+    observer auditor
+
+    choice MarkRunStarted : ContractId ProcessingRun
+      with
+        at : Time
+      controller operator
+      do create this with status = Running, startedAt = Some at
+
+    choice MarkRunCompleted : ContractId ProcessingRun
+      with
+        at : Time
+      controller operator
+      do create this with status = Completed, finishedAt = Some at
+
+    choice MarkRunFailed : ContractId ProcessingRun
+      with
+        at : Time
+      controller operator
+      do create this with status = Failed, finishedAt = Some at
+
+    choice AttachAttestationReference : ContractId ProcessingRun
+      with
+        reference : Text
+      controller operator
+      do create this with attestationRef = Some reference
+
+    choice ApproveReleasePreparation : ContractId ProcessingRun
+      controller operator
+      do create this with status = ReleasePending
+
+
+template BenchmarkRelease
+  with
+    operator : Party
+    auditor : Party
+    runId : Text
+    snapshotId : Text
+    scenario : Scenario
+    releaseStatus : ReleaseStatus
+    createdAt : Time
+    approvedAt : Optional Time
+    releaseScope : [Text]
+  where
+    signatory operator
+    observer auditor
+
+    -- snapshotId points to an off-ledger backend projection. On-ledger state controls
+    -- whether the release is approved/published, not how analytics are computed.
+    choice ApproveRelease : ContractId BenchmarkRelease
+      with
+        at : Time
+      controller operator
+      do create this with releaseStatus = ReleaseApproved, approvedAt = Some at
+
+    choice PublishRelease : ContractId BenchmarkRelease
+      controller operator
+      do create this with releaseStatus = Published
+
+    choice CancelRelease : ()
+      controller operator
+      do pure ()
+
+
+template InstitutionOutput
+  with
+    operator : Party
+    auditor : Party
+    institution : Party
+    outputId : Text
+    snapshotId : Text
+    releaseStatus : ReleaseStatus
+    deltaSummary : Text
+    riskTier : Text
+    confidenceLevel : Text
+    attestationRef : Text
+    createdAt : Time
+  where
+    signatory operator
+    observer institution, auditor
+
+    -- Full institution analytics stay in backend projections. This contract is a
+    -- minimal disclosure and audit control record for the released output.
+    choice ReleaseToInstitution : ContractId InstitutionOutput
+      controller operator
+      do create this with releaseStatus = Published
+
+    choice MarkRecorded : ContractId InstitutionOutput
+      controller operator
+      do create this with releaseStatus = Published
+
+    choice ArchiveOutput : ()
+      controller operator
+      do pure ()
+
+
+template AttestationReference
+  with
+    operator : Party
+    auditor : Party
+    institutionObservers : [Party]
+    referenceId : Text
+    refType : Text
+    relatedRunId : Text
+    relatedOutputId : Optional Text
+    issuedAt : Time
+    issuer : Text
+  where
+    signatory operator
+    observer auditor
+    observer institutionObservers
+
+
+template AuditRecord
+  with
+    operator : Party
+    auditor : Party
+    institution : Party
+    recordId : Text
+    outputId : Text
+    snapshotId : Text
+    attestationRef : Text
+    recordStatus : RecordStatus
+    createdAt : Time
+    finalizedAt : Optional Time
+  where
+    signatory operator
+    observer institution, auditor
+
+    -- TODO: backend bridge should submit this command after it has correlated
+    -- output projections, attestation references, and Canton command results.
+    choice FinalizeRecord : ContractId AuditRecord
+      with
+        at : Time
+      controller operator
+      do create this with recordStatus = Finalized, finalizedAt = Some at
+
+    nonconsuming choice AcknowledgeRecord : ()
+      controller institution
+      do pure ()
+
+    choice ArchiveRecord : ()
+      controller operator
+      do pure ()

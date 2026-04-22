@@ -1,14 +1,15 @@
 import type { ReactNode } from "react";
 import { InstitutionTopBar, type InstitutionTopBarProps } from "../components/InstitutionTopBar";
-import type { NavKey, Role } from "../data/types";
+import type { NavKey } from "../data/types";
+import { roleLabels, type AppRole } from "../types/roles";
 
 type ThemeMode = "night" | "day";
 
 interface AppShellProps {
   activeNav: NavKey;
   onNavigate: (key: NavKey) => void;
-  role: Role;
-  onRoleChange: (role: Role) => void;
+  role: AppRole;
+  onRoleChange: (role: AppRole) => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
   topBar: Omit<
@@ -177,7 +178,7 @@ export function AppShell({
             <div className="sidebar-profile__avatar">AB</div>
             <div>
               <strong>Alpha Bank</strong>
-              <span>Institution Desk</span>
+              <span>{roleLabels[role]}</span>
             </div>
           </div>
         </div>

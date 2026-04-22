@@ -1,96 +1,194 @@
 module Main where
 
-import CRTI.Asset
-import CRTI.Benchmark
-import CRTI.Contribution
-import CRTI.Request
-import CRTI.Result
 import CRTI.Types
+import CRTI.Workflow
 import Daml.Script
+
+-- Happy-path workflow skeleton for Compass.
+--
+-- On-ledger:
+-- 1. operator creates Campaign
+-- 2. institution creates ContributionSubmission
+-- 3. operator reviews submission
+-- 4. operator starts ProcessingRun
+-- 6. operator/bridge marks run completed
+-- 7. operator creates/publishes BenchmarkRelease
+-- 8. operator creates InstitutionOutput
+-- 9. institution triggers record-to-Canton flow
+-- 10. operator finalizes AuditRecord
+--
+-- Off-ledger:
+-- 5. backend computes benchmark snapshot, reliability, dispersion, institution
+--    comparisons, interpretation text, and projection rows.
+--
+-- TODO: backend event ingestion from Canton should hydrate projections from these contracts.
+-- TODO: backend command submission should exercise review/run/release/finalization choices.
+-- TODO: projection synchronization should map snapshotId/outputId to backend read models.
+-- TODO: record-to-Canton finalization handshake should correlate AuditRecord finalization.
 
 setup : Script ()
 setup = script do
-  issuer <- allocatePartyWithHint "Issuer" (PartyIdHint "issuer")
-  operator <- allocatePartyWithHint "Operator" (PartyIdHint "operator")
-  custodian <- allocatePartyWithHint "Custodian" (PartyIdHint "custodian")
-  regulator <- allocatePartyWithHint "Regulator" (PartyIdHint "regulator")
-  institution <- allocatePartyWithHint "InstitutionDesk" (PartyIdHint "institution")
-
-  let assetId =
-        TokenizedAssetId
-          with
-            assetId = "UST-REPO-001"
-            issuer = issuer
-            symbol = "UST"
-            scenario = RepoWithTreasuryCollateral
-
-  let score =
-        DeterministicScore
-          with
-            liquidityScore = 69.1
-            benchmarkDelta = -4.7
-            benchmarkReliability = 91.4
-            confidenceTier = HighConfidence
+  operator <- allocatePartyWithHint "CompassOperator" (PartyIdHint "compass-operator")
+  auditor <- allocatePartyWithHint "CompassAuditor" (PartyIdHint "compass-auditor")
+  alphaBank <- allocatePartyWithHint "AlphaBankDesk" (PartyIdHint "alpha-bank-desk")
+  meridian <- allocatePartyWithHint "MeridianTreasuryDesk" (PartyIdHint "meridian-treasury-desk")
+  northline <- allocatePartyWithHint "NorthlineDesk" (PartyIdHint "northline-desk")
 
   now <- getTime
 
-  let audit =
-        AuditMetadata
-          with
-            attestationReference = "TEE-ATTEST-Q2-REPONET-014"
-            processedAt = now
-            rawRetentionPolicy = "none"
-
-  submit issuer do
-    createCmd TokenizedAsset with
-      issuer = issuer
+  campaignCid <- submit operator do
+    createCmd Campaign with
       operator = operator
-      custodian = custodian
-      asset = assetId
-      description = "Demo repo and treasury collateral asset"
-
-  submit institution do
-    createCmd BenchmarkContribution with
-      contributor = institution
-      operator = operator
-      regulator = regulator
+      auditor = auditor
+      participatingInstitutions = [alphaBank, meridian, northline]
+      campaignId = "CMP-Q2-REPO-TREASURY"
+      title = "Q2 Repo Liquidity and Treasury Readiness Campaign"
       scenario = RepoWithTreasuryCollateral
-      contributionType = SystemSigned
-      reputationScore = 0.82
-      qualityWeight = 1.15
-      selectedFields = ["repo notional range", "liquidity buffer ratio", "average maturity bucket"]
-      campaignName = "Q2 Repo Liquidity and Treasury Readiness Campaign"
-      policySummary = "Selected fields only"
+      status = Active
+      submissionWindowStart = now
+      submissionWindowEnd = now
+      minReputationThreshold = 0.78
+      confidenceTierRequired = HighConfidence
+      teeProcessingEnabled = True
+      requestedFields =
+        [ "repo notional range"
+        , "secured funding rate"
+        , "collateral concentration"
+        , "average maturity bucket"
+        , "liquidity buffer ratio"
+        ]
+
+  submissionCid <- submit alphaBank do
+    createCmd ContributionSubmission with
+      operator = operator
+      auditor = auditor
+      institution = alphaBank
+      campaignId = "CMP-Q2-REPO-TREASURY"
+      submissionId = "SUB-ALPHA-Q2-001"
+      submissionType = SystemSigned
+      confidenceTier = HighConfidence
+      payloadHash = "sha256:alpha-bank-q2-repo-redacted"
+      policyStatus = NeedsReview
+      reviewStatus = Submitted
+      attestationStatus = Attached
+      submittedAt = now
+
+  underReviewCid <- submit alphaBank do
+    exerciseCmd submissionCid SubmitForReview
 
   submit operator do
-    createCmd Benchmark with
-      publisher = operator
-      operator = operator
-      regulator = regulator
-      scenario = RepoWithTreasuryCollateral
-      contributorCount = 24
-      trustWeightedScore = 88.6
-      benchmarkReliability = 91.4
-      liquidityDispersion = 12.4
-      benchmarkReference = "BMK-Q2-REPO-2026"
+    exerciseCmd underReviewCid ApproveSubmission with
+      notes = "Policy checks passed. Payload hash only; raw payload remains off-ledger."
+      reviewedAt = now
 
-  submit institution do
-    createCmd IntelligenceRequest with
-      requester = institution
+  processingCampaignCid <- submit operator do
+    exerciseCmd campaignCid StartProcessing
+
+  queuedRunCid <- submit operator do
+    createCmd ProcessingRun with
       operator = operator
-      regulator = regulator
-      scenario = RepoWithTreasuryCollateral
-      benchmarkReference = "BMK-Q2-REPO-2026"
-      requestReason = "Institution-scoped comparison"
+      auditor = auditor
+      campaignId = "CMP-Q2-REPO-TREASURY"
+      runId = "RUN-Q2-REPO-014"
+      status = Queued
+      submissionCount = 28
+      validSubmissionCount = 24
+      startedAt = None
+      finishedAt = None
+      runtimeMode = "tee_deterministic"
+      retentionPolicyStatus = Enforced
+      attestationRef = None
+
+  runningRunCid <- submit operator do
+    exerciseCmd queuedRunCid MarkRunStarted with at = now
+
+  -- Backend off-ledger computation happens here:
+  -- BenchmarkComputationService, ReliabilityScoringService, AlertsService,
+  -- InstitutionComparisonService, and InterpretationService produce snapshot/output projections.
+
+  completedRunCid <- submit operator do
+    exerciseCmd runningRunCid MarkRunCompleted with at = now
+
+  attestedRunCid <- submit operator do
+    exerciseCmd completedRunCid AttachAttestationReference with
+      reference = "TEE-ATTEST-Q2-REPONET-014"
+
+  releasePendingRunCid <- submit operator do
+    exerciseCmd attestedRunCid ApproveReleasePreparation
 
   submit operator do
-    createCmd IntelligenceResult with
-      recipient = institution
+    createCmd AttestationReference with
       operator = operator
-      regulator = regulator
-      benchmarkReference = "BMK-Q2-REPO-2026"
-      score = score
-      explainableSummary = "Deterministic score produced off-ledger and restated locally for audit handoff."
-      audit = audit
+      auditor = auditor
+      institutionObservers = [alphaBank]
+      referenceId = "TEE-ATTEST-Q2-REPONET-014"
+      refType = "tee_runtime"
+      relatedRunId = "RUN-Q2-REPO-014"
+      relatedOutputId = None
+      issuedAt = now
+      issuer = "Compass Runtime"
+
+  releaseCid <- submit operator do
+    createCmd BenchmarkRelease with
+      operator = operator
+      auditor = auditor
+      runId = "RUN-Q2-REPO-014"
+      snapshotId = "SNAP-Q2-REPO-014"
+      scenario = RepoWithTreasuryCollateral
+      releaseStatus = ReleaseDraft
+      createdAt = now
+      approvedAt = None
+      releaseScope =
+        [ "benchmark reliability package"
+        , "cohort-level benchmark metrics"
+        , "institution-scoped comparison outputs"
+        , "attestation reference"
+        , "no raw institutional contribution data"
+        ]
+
+  approvedReleaseCid <- submit operator do
+    exerciseCmd releaseCid ApproveRelease with at = now
+
+  publishedReleaseCid <- submit operator do
+    exerciseCmd approvedReleaseCid PublishRelease
+
+  outputCid <- submit operator do
+    createCmd InstitutionOutput with
+      operator = operator
+      auditor = auditor
+      institution = alphaBank
+      outputId = "OUT-ALPHA-Q2-014"
+      snapshotId = "SNAP-Q2-REPO-014"
+      releaseStatus = ReleaseApproved
+      deltaSummary = "-4.7 pts vs active benchmark"
+      riskTier = "Contained Watch"
+      confidenceLevel = "High"
+      attestationRef = "TEE-ATTEST-Q2-REPONET-014"
+      createdAt = now
+
+  releasedOutputCid <- submit operator do
+    exerciseCmd outputCid ReleaseToInstitution
+
+  recordedOutputCid <- submit operator do
+    exerciseCmd releasedOutputCid MarkRecorded
+
+  auditRecordCid <- submit operator do
+    createCmd AuditRecord with
+      operator = operator
+      auditor = auditor
+      institution = alphaBank
+      recordId = "AUD-ALPHA-Q2-014"
+      outputId = "OUT-ALPHA-Q2-014"
+      snapshotId = "SNAP-Q2-REPO-014"
+      attestationRef = "TEE-ATTEST-Q2-REPONET-014"
+      recordStatus = RecordDraft
+      createdAt = now
+      finalizedAt = None
+
+  finalizedRecordCid <- submit operator do
+    exerciseCmd auditRecordCid FinalizeRecord with at = now
+
+  submit alphaBank do
+    exerciseCmd finalizedRecordCid AcknowledgeRecord
 
   pure ()

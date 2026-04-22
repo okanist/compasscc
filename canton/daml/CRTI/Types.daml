@@ -11,13 +11,74 @@ data PartyRole
 data ContributionType
   = SelfReported
   | SystemSigned
-  | OracleCustodianAttested
+  | CustodianAttested
   deriving (Eq, Show)
 
 data ScenarioType
   = Repo
   | Treasury
   | RepoWithTreasuryCollateral
+  deriving (Eq, Show)
+
+type Scenario = ScenarioType
+
+type SubmissionType = ContributionType
+
+data CampaignStatus
+  = Draft
+  | Active
+  | Closed
+  | Processing
+  | Released
+  deriving (Eq, Show)
+
+data PolicyStatus
+  = InPolicy
+  | NeedsReview
+  | OutOfPolicy
+  deriving (Eq, Show)
+
+data ReviewStatus
+  = Submitted
+  | UnderReview
+  | Approved
+  | Rejected
+  | NeedsAttestation
+  deriving (Eq, Show)
+
+data AttestationStatus
+  = NoAttestation
+  | Pending
+  | Attached
+  | Verified
+  deriving (Eq, Show)
+
+data ProcessingRunStatus
+  = Queued
+  | Running
+  | Completed
+  | Failed
+  | ReleasePending
+  | RunReleased
+  deriving (Eq, Show)
+
+data ReleaseStatus
+  = ReleaseDraft
+  | ReleaseApproved
+  | Published
+  | ReleaseArchived
+  deriving (Eq, Show)
+
+data RecordStatus
+  = RecordDraft
+  | Finalized
+  | RecordArchived
+  deriving (Eq, Show)
+
+data RetentionPolicyStatus
+  = Enforced
+  | NotApplicable
+  | RetentionFailed
   deriving (Eq, Show)
 
 data ConfidenceTier

@@ -1,5 +1,3 @@
-export type Role = "Institution Desk" | "Operator" | "Regulator / Auditor";
-
 export type NavKey =
   | "overview"
   | "campaign"
