@@ -107,16 +107,27 @@ export function DeskProcessingView({ data: initialData }: DeskProcessingViewProp
   }
 
   const data = result.data;
+  const realProcessingFlow =
+    data.steps.length > 0
+      ? data.steps.map((step, index) => ({
+          title: step.label,
+          explanation: step.value,
+          status:
+            index === 0
+              ? data.status ?? "active"
+              : index >= data.steps.length - 2
+                ? "Issued"
+                : "Completed",
+          tone: index === 0 ? "cool" : index >= data.steps.length - 2 ? "warm" : "success",
+          evidence: data.evidenceRefs?.[index] ?? step.value
+        }))
+      : processingFlow;
 
   return (
     <div className="page-grid">
       <SectionCard title="Benchmark Boundary Summary" subtitle="Raw data goes in. Only intelligence comes out.">
         <div className="processing-boundary-summary">
-          <p>
-            Compass processes selected contribution fields inside a confidential execution boundary,
-            runs deterministic benchmark logic, and returns only derived benchmark intelligence plus
-            institution-scoped outputs.
-          </p>
+          <p>{data.body}</p>
           <div className="boundary-card-grid">
             {boundarySummary.map((item) => (
               <div key={item.label} className="boundary-mini-card">
@@ -133,7 +144,7 @@ export function DeskProcessingView({ data: initialData }: DeskProcessingViewProp
         subtitle="Each benchmark package is processed inside a controlled execution boundary before any derived output is released."
       >
         <div className="processing-flow-list">
-          {processingFlow.map((step, index) => (
+          {realProcessingFlow.map((step, index) => (
             <article key={step.title} className="processing-flow-row">
               <div className="processing-flow-row__index">0{index + 1}</div>
               <div className="processing-flow-row__main">

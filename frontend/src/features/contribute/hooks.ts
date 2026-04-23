@@ -1,6 +1,14 @@
 import type { CampaignData } from "../../data/types";
 import type { ViewResult } from "../../components/primitives/ViewState";
 import type { RoleAction, RoleMetric } from "../../components/primitives/RoleViewSections";
+import { useCallback, useEffect, useState } from "react";
+import { getDeskCampaign, submitDeskContribution } from "../../data/api";
+
+export interface DeskContributeResult extends ViewResult<CampaignData> {
+  submit: (submissionType: string) => Promise<number | null>;
+  submitStatus: "idle" | "submitting" | "success" | "error";
+  submitMessage?: string;
+}
 
 export interface OperatorContributeData {
   metrics: RoleMetric[];
@@ -15,8 +23,57 @@ export interface AuditorContributeData {
   actions: RoleAction[];
 }
 
-export function useDeskContribute(data: CampaignData): ViewResult<CampaignData> {
-  return data ? { status: "ready", data } : { status: "empty" };
+export function useDeskContribute(data: CampaignData): DeskContributeResult {
+  const [result, setResult] = useState<ViewResult<CampaignData>>({ status: "loading" });
+  const [submitStatus, setSubmitStatus] = useState<DeskContributeResult["submitStatus"]>("idle");
+  const [submitMessage, setSubmitMessage] = useState<string>();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getDeskCampaign(data.id ?? 1)
+      .then((payload) => {
+        if (!cancelled) {
+          setResult(payload ? { status: "ready", data: payload } : { status: "empty" });
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setResult(data ? { status: "ready", data } : { status: "error", message: error.message });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
+
+  const submit = useCallback(
+    async (submissionType: string) => {
+      if (!result.data) {
+        return null;
+      }
+
+      setSubmitStatus("submitting");
+      setSubmitMessage(undefined);
+
+      try {
+        const response = await submitDeskContribution(result.data.id ?? 1, submissionType, result.data.requestedFields);
+        const refreshed = await getDeskCampaign(result.data.id ?? 1);
+        setResult({ status: "ready", data: refreshed });
+        setSubmitStatus("success");
+        setSubmitMessage(response.message);
+        return response.related_resource_id ?? 1;
+      } catch (error) {
+        setSubmitStatus("error");
+        setSubmitMessage(error instanceof Error ? error.message : "Contribution submission failed.");
+        return null;
+      }
+    },
+    [result.data]
+  );
+
+  return { ...result, submit, submitStatus, submitMessage };
 }
 
 export function useOperatorContribute(): ViewResult<OperatorContributeData> {

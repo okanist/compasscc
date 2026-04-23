@@ -21,7 +21,23 @@ def get_campaign(campaign_id: int, service: OperatorViewService = Depends(get_op
 
 @router.get("/submissions/pending")
 def get_pending_submissions(repo: CompassRepository = Depends(get_repository)):
-    return repo.list_submissions(review_status="pending")
+    submissions = repo.list_pending_operator_submissions()
+    return [
+        {
+            "id": item.id,
+            "campaign_id": item.campaign_id,
+            "institution_id": item.institution_id,
+            "institution": repo.get_institution(item.institution_id).name,
+            "submission_type": item.submission_type,
+            "policy_status": item.policy_status,
+            "review_status": item.review_status,
+            "attestation_status": item.attestation_status,
+            "confidence_tier": item.confidence_tier,
+            "submitted_at": item.submitted_at,
+            "updated_at": item.updated_at,
+        }
+        for item in submissions
+    ]
 
 
 @router.post("/submissions/{submission_id}/review", response_model=CommandResult)
@@ -36,6 +52,17 @@ def review_submission(
 @router.get("/processing/{run_id}")
 def get_processing(run_id: int, service: OperatorViewService = Depends(get_operator_service)):
     return service.get_processing_view(run_id)
+
+
+@router.get("/institution-output/{institution_id}")
+def get_institution_output(
+    institution_id: int,
+    snapshot_id: int | None = Query(default=None),
+    repo: CompassRepository = Depends(get_repository),
+    service: OperatorViewService = Depends(get_operator_service),
+):
+    active_snapshot_id = snapshot_id or max(repo.snapshots)
+    return service.get_institution_output_review(institution_id, active_snapshot_id)
 
 
 @router.post("/processing/{campaign_id}/trigger", response_model=CommandResult)

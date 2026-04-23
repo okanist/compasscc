@@ -1,6 +1,8 @@
 import type { BenchmarkData } from "../../data/types";
 import type { ViewResult } from "../../components/primitives/ViewState";
 import type { RoleAction, RoleMetric } from "../../components/primitives/RoleViewSections";
+import { useEffect, useState } from "react";
+import { getAuditorBenchmarkAudit, getDeskBenchmark } from "../../data/api";
 
 export interface OperatorBenchmarkData {
   metrics: RoleMetric[];
@@ -15,7 +17,29 @@ export interface AuditorBenchmarkData {
 }
 
 export function useDeskBenchmark(data: BenchmarkData): ViewResult<BenchmarkData> {
-  return data.primaryMetrics.length ? { status: "ready", data } : { status: "empty" };
+  const [result, setResult] = useState<ViewResult<BenchmarkData>>({ status: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getDeskBenchmark(data.selectedScenario)
+      .then((payload) => {
+        if (!cancelled) {
+          setResult(payload.primaryMetrics.length ? { status: "ready", data: payload } : { status: "empty" });
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setResult(data.primaryMetrics.length ? { status: "ready", data } : { status: "error", message: error.message });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
+
+  return result;
 }
 
 export function useOperatorBenchmark(): ViewResult<OperatorBenchmarkData> {
@@ -38,20 +62,51 @@ export function useOperatorBenchmark(): ViewResult<OperatorBenchmarkData> {
 }
 
 export function useAuditorBenchmark(): ViewResult<AuditorBenchmarkData> {
-  return {
-    status: "ready",
-    data: {
-      metrics: [
-        { label: "Methodology Summary", value: "Trust-weighted", detail: "Benchmark uses contribution depth, assurance class, and confidence tier" },
-        { label: "Reliability", value: "91.4%", detail: "Current release candidate reliability score" },
-        { label: "Attested Coverage", value: "68%", detail: "Coverage supporting benchmark audit package" },
-        { label: "Released Output Scope", value: "Derived only", detail: "Scope excludes raw institutional contribution fields" }
-      ],
-      notes: ["Methodology version: COMPASS-BENCH-Q2", "Cohort anonymity threshold satisfied", "Distribution released without institution-level raw positions"],
-      actions: [
-        { title: "View Audit Package", body: "Inspect methodology, reliability, coverage, and released scope." },
-        { title: "View Audit Trail", body: "Review benchmark construction and release events." }
-      ]
-    }
-  };
+  const [result, setResult] = useState<ViewResult<AuditorBenchmarkData>>({ status: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getAuditorBenchmarkAudit(1)
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+
+        const snapshot = payload.snapshot;
+        setResult({
+          status: "ready",
+          data: {
+            metrics: [
+              { label: "Scenario", value: snapshot.scenario, detail: "Benchmark audit scope" },
+              { label: "Release Status", value: "Published", detail: `Snapshot ${snapshot.id}` },
+              { label: "Reliability", value: `${snapshot.reliability_score.toFixed(1)}%`, detail: "Current release reliability score" },
+              { label: "Attested Coverage", value: `${Math.round(snapshot.attested_coverage * 100)}%`, detail: "Coverage supporting audit package" },
+              { label: "Methodology Summary", value: "Trust-weighted", detail: "Contribution depth, assurance class, and confidence tier" },
+              { label: "Released Output Scope", value: "Derived only", detail: "Raw institutional positions excluded" },
+              { label: "Snapshot Reference", value: `Snapshot ${snapshot.id}`, detail: `Run ${snapshot.processing_run_id}` },
+              { label: "Release Timestamp", value: new Date(snapshot.created_at).toLocaleString(), detail: "Snapshot creation time" }
+            ],
+            notes: [
+              "Methodology version: COMPASS-BENCH-Q2",
+              "Cohort anonymity threshold satisfied",
+              "Distribution released without institution-level raw positions",
+              ...(payload.alerts ?? []).map((alert: string) => `Confidence note: ${alert}`)
+            ],
+            actions: payload.actions ?? []
+          }
+        });
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setResult({ status: "error", message: error.message });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return result;
 }

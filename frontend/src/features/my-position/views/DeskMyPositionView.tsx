@@ -36,7 +36,7 @@ const explanationPoints = [
   "Suitable for audit handoff and internal review"
 ];
 
-const recommendedActions = [
+const defaultRecommendedActions = [
   {
     title: "Review collateral concentration",
     body: "Assess concentration in treasury-heavy collateral profiles against active cohort behavior."
@@ -51,7 +51,7 @@ const recommendedActions = [
   }
 ];
 
-const auditItems = [
+const defaultAuditItems = [
   "Benchmark snapshot reference available",
   "Institution-scoped output package ready",
   "Attestation-linked summary available",
@@ -67,14 +67,21 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
 
   const data = result.data;
   const metricMap = new Map(data.metrics.map((metric) => [metric.label, metric.value]));
+  const recommendedActions = data.recommendedActions?.length ? data.recommendedActions : defaultRecommendedActions;
+  const auditItems = data.auditHandoff?.length ? data.auditHandoff : defaultAuditItems;
+  const recordLabel =
+    result.recordStatus === "recording"
+      ? "Recording..."
+      : data.recordStatus === "finalized"
+        ? "Recorded to Canton"
+        : "Record to Canton";
 
   return (
     <div className="page-grid position-page">
       <SectionCard title="Institution Signal Summary">
         <div className="position-signal-card">
           <p className="position-signal-card__lead">
-            Alpha Bank remains within acceptable benchmark bounds, but underperforms the active cohort
-            on liquidity efficiency and collateral diversification.
+            {data.suggestedInterpretation}
           </p>
           <div className="position-feature-grid">
             {featuredOutputs.map((label) => (
@@ -117,9 +124,8 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
           <div className="position-band-copy">
             <span className="eyebrow">Benchmark-relative position</span>
             <strong>{metricMap.get("Delta vs Benchmark")}</strong>
-            <p>
-              Alpha Bank sits below the active network average while remaining inside acceptable
-              benchmark bounds for the current cohort.
+          <p>
+              {data.suggestedInterpretation}
             </p>
           </div>
           <div className="position-band-visual" aria-label="Position versus benchmark range">
@@ -161,11 +167,7 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
 
       <SectionCard title="Explainable Summary">
         <div className="position-explain-card">
-          <p>
-            Deterministic benchmark comparison places Alpha Bank below the current trust-weighted
-            cohort median. The explanation layer restates derived benchmark outputs for local review
-            and audit handoff without accessing raw peer contribution data.
-          </p>
+          <p>{data.explainableSummary}</p>
           <div className="position-explain-grid">
             {explanationPoints.map((point) => (
               <span key={point}>{point}</span>
@@ -192,15 +194,32 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
         <div className="position-audit-panel">
           <div className="position-audit-list">
             {auditItems.map((item) => (
-              <span key={item} className={item === "Record to Canton action" ? "position-audit-item--action" : undefined}>
+              <span key={item} className={item.includes("Record") ? "position-audit-item--action" : undefined}>
                 {item}
               </span>
             ))}
+            {data.cantonRecordRef ? <span className="position-audit-item--action">{data.cantonRecordRef}</span> : null}
           </div>
-          <button type="button" className="record-button position-audit-button">
-            Record to Canton
+          <button
+            type="button"
+            className="record-button position-audit-button"
+            onClick={() => void result.record()}
+            disabled={result.recordStatus === "recording" || data.recordStatus === "finalized"}
+          >
+            {recordLabel}
           </button>
         </div>
+        {result.recordMessage ? (
+          <div
+            className={
+              result.recordStatus === "error"
+                ? "role-state-panel role-state-panel--error"
+                : "role-state-panel"
+            }
+          >
+            {result.recordMessage}
+          </div>
+        ) : null}
       </SectionCard>
     </div>
   );

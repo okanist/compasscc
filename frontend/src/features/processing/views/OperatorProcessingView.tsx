@@ -16,6 +16,29 @@ export function OperatorProcessingView() {
           <RoleListSection title="Benchmark Run Lifecycle" items={data.lifecycle} />
           <SectionCard title="Operator Actions">
             <RoleActionGrid actions={data.actions} />
+            <div className="operator-control-row">
+              <button
+                type="button"
+                className="record-button"
+                onClick={() => void result.trigger()}
+                disabled={result.actionStatus === "submitting"}
+              >
+                Trigger Benchmark Processing
+              </button>
+              <button
+                type="button"
+                className="record-button"
+                onClick={() => void result.approveRelease()}
+                disabled={result.actionStatus === "submitting"}
+              >
+                Approve Release
+              </button>
+            </div>
+            {result.actionMessage ? (
+              <div className={result.actionStatus === "error" ? "role-state-panel role-state-panel--error" : "role-state-panel"}>
+                {result.actionMessage}
+              </div>
+            ) : null}
           </SectionCard>
         </div>
       )}

@@ -60,8 +60,12 @@ class ProjectionFactory:
             metrics=[
                 MetricDTO(label="Run Status", value=run.run_status),
                 MetricDTO(label="Runtime Mode", value=run.runtime_mode),
+                MetricDTO(label="Input Count", value=str(run.input_count)),
                 MetricDTO(label="Valid Inputs", value=str(run.valid_submission_count)),
+                MetricDTO(label="Invalid Inputs", value=str(run.invalid_submission_count)),
                 MetricDTO(label="Retention Policy", value=run.retention_policy_status),
+                MetricDTO(label="Attestation Ref", value=run.attestation_ref or "Pending"),
+                MetricDTO(label="Release Readiness", value=str(run.notes_json.get("release_readiness", "draft"))),
             ],
             lifecycle=[
                 "submission reviewed",
@@ -100,6 +104,8 @@ class ProjectionFactory:
     def institution_output_projection(self, institution_id: int, scenario: str | None, actions: list[ActionDTO]) -> InstitutionOutputProjection:
         snapshot = self.repo.get_snapshot_by_scenario(scenario)
         output = self.repo.get_output_for_institution(institution_id, snapshot.id)
+        audit_record = self.repo.get_audit_record_for_output(output.id)
+        record_status = audit_record.record_status if audit_record else "draft"
         return InstitutionOutputProjection(
             output=output,
             metrics=[
@@ -118,8 +124,9 @@ class ProjectionFactory:
                 "Benchmark snapshot reference available",
                 "Institution-scoped output package ready",
                 "Attestation-linked summary available",
-                "Record to Canton action",
+                f"Record lifecycle: {record_status}",
             ],
+            audit_record=audit_record,
             actions=actions,
         )
 

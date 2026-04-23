@@ -2199,6 +2199,64 @@ a {
   cursor: pointer;
 }
 
+.record-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.contribution-submit-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.contribution-submit-row .role-state-panel {
+  min-height: auto;
+  padding: 10px 12px;
+}
+
+.operator-review-list {
+  display: grid;
+  gap: 12px;
+}
+
+.operator-review-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 14px;
+}
+
+.operator-review-row__main {
+  display: grid;
+  gap: 6px;
+}
+
+.operator-review-row__main p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.operator-review-row__actions,
+.operator-control-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.operator-review-row__actions .record-button,
+.operator-control-row .record-button {
+  margin-top: 0;
+}
+
 .processing-boundary-summary {
   display: grid;
   gap: 18px;

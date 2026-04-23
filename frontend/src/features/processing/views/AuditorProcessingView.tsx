@@ -14,6 +14,7 @@ export function AuditorProcessingView() {
             <RoleMetricGrid metrics={data.guarantees} />
           </SectionCard>
           <RoleListSection title="Evidence References" items={data.evidence} />
+          <RoleListSection title="Step And Evidence Summary" items={data.stepSummary} />
           <SectionCard title="Auditor Actions">
             <RoleActionGrid actions={data.actions} />
           </SectionCard>

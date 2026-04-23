@@ -131,6 +131,7 @@ class AuditRecordDTO(BaseModel):
     record_status: str
     canton_record_ref: str | None
     release_scope_json: dict[str, Any]
+    created_at: datetime
     recorded_at: datetime | None
     created_by: str
 
@@ -175,6 +176,7 @@ class InstitutionOutputProjection(BaseModel):
     explainable_summary: str
     recommended_actions: list[dict[str, Any]]
     audit_handoff: list[str]
+    audit_record: AuditRecordDTO | None = None
     actions: list[ActionDTO]
 
 
@@ -194,7 +196,7 @@ class ContributionSubmitRequest(BaseModel):
 
 
 class ReviewSubmissionRequest(BaseModel):
-    review_status: Literal["approved", "rejected", "needs_review"]
+    review_status: Literal["approved", "rejected", "needs_attestation", "under_review"]
     policy_status: str | None = None
     notes: str | None = None
 
@@ -204,3 +206,4 @@ class CommandResult(BaseModel):
     message: str
     resource_id: int | None = None
     next_state: str | None = None
+    related_resource_id: int | None = None

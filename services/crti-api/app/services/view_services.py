@@ -14,10 +14,28 @@ class DeskViewService(BaseViewService):
     def get_overview(self, institution_id: int = 1):
         snapshot = self.repo.get_snapshot()
         output = self.repo.get_output_for_institution(institution_id, snapshot.id)
+        campaign = self.repo.get_active_campaign()
+        submission = next(
+            (
+                item
+                for item in self.repo.list_submissions(campaign_id=campaign.id if campaign else None)
+                if item.institution_id == institution_id
+            ),
+            None,
+        )
         return self.projections.overview_projection(
             "institution_desk",
             [
-                MetricDTO(label="Own Contribution Status", value="Submitted", detail="Awaiting operator validation"),
+                MetricDTO(
+                    label="Active Campaign",
+                    value=campaign.title if campaign else "None",
+                    detail=campaign.scenario if campaign else "No active campaign is accepting submissions",
+                ),
+                MetricDTO(
+                    label="Own Contribution Status",
+                    value=(submission.review_status.replace("_", " ").title() if submission else "Not Submitted"),
+                    detail="Latest institution submission state",
+                ),
                 MetricDTO(label="Own Benchmark Teaser", value=f"{output.delta_vs_benchmark:+.1f} pts", detail="Delta vs active benchmark"),
                 MetricDTO(label="Benchmark Reliability", value=f"{snapshot.reliability_score:.1f}%"),
                 MetricDTO(label="Network Benchmark Context", value=f"{snapshot.contributor_count} contributors"),
@@ -61,7 +79,8 @@ class DeskViewService(BaseViewService):
 class OperatorViewService(BaseViewService):
     def get_overview(self):
         snapshot = self.repo.get_snapshot()
-        pending = self.repo.list_submissions(review_status="pending")
+        pending = self.repo.list_pending_operator_submissions()
+        latest_run = self.repo.get_latest_run_for_campaign(1)
         return self.projections.overview_projection(
             "operator",
             [
@@ -70,7 +89,8 @@ class OperatorViewService(BaseViewService):
                 MetricDTO(label="Attested Coverage", value=pct(snapshot.attested_coverage)),
                 MetricDTO(label="Benchmark Reliability", value=f"{snapshot.reliability_score:.1f}%"),
                 MetricDTO(label="Pending Validations", value=str(len(pending))),
-                MetricDTO(label="Processing Health", value="Nominal"),
+                MetricDTO(label="Processing Health", value=latest_run.run_status.replace("_", " ").title()),
+                MetricDTO(label="Release Readiness", value=str(latest_run.notes_json.get("release_readiness", "draft")).replace("_", " ").title()),
             ],
             ["Operational view across campaign participation, validation state, and processing health."],
             [
@@ -89,11 +109,12 @@ class OperatorViewService(BaseViewService):
         )
 
     def get_processing_view(self, run_id: int):
+        run = self.repo.get_run(run_id)
         return self.projections.processing_projection(
             run_id,
             [
                 ActionDTO(title="Trigger Benchmark Run", body="Start or rerun benchmark computation."),
-                ActionDTO(title="Approve Release", body="Approve ready output packages."),
+                ActionDTO(title="Approve Release", body=f"Approve ready output packages from {run.run_status.replace('_', ' ')} state."),
             ],
         )
 
@@ -121,6 +142,8 @@ class OperatorViewService(BaseViewService):
 class AuditorViewService(BaseViewService):
     def get_overview(self):
         snapshot = self.repo.get_snapshot()
+        latest_run = self.repo.get_latest_run_for_campaign(snapshot.campaign_id)
+        latest_record = max(self.repo.audit_records.values(), key=lambda item: item.id)
         return self.projections.overview_projection(
             "auditor",
             [
@@ -129,8 +152,10 @@ class AuditorViewService(BaseViewService):
                 MetricDTO(label="Release Scope", value="Derived outputs only"),
                 MetricDTO(label="Retention Compliance", value="Enforced"),
                 MetricDTO(label="Audit Trail Status", value="Current"),
+                MetricDTO(label="Last Recorded Run", value=f"Run {latest_run.id}", detail=latest_run.run_status.replace("_", " ").title()),
+                MetricDTO(label="Record Lifecycle", value=latest_record.record_status.replace("_", " ").title(), detail=latest_record.canton_record_ref or "Canton reference pending"),
             ],
-            ["Audit-oriented summary of reliability, attestation coverage, release scope, and retention controls."],
+            ["Audit-oriented summary of reliability, attestation coverage, release scope, retention controls, and record lifecycle state."],
             [
                 ActionDTO(title="View Audit Package", body="Open benchmark and output evidence package."),
                 ActionDTO(title="View Audit Trail", body="Review release and evidence events."),

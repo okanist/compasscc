@@ -76,6 +76,14 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
     availableContributionTypes.length > 0
       ? availableContributionTypes
       : (Object.keys(contributionImpact) as Array<keyof typeof contributionImpact>);
+  const handleSubmit = async () => {
+    const runId = await result.submit(selectedType);
+
+    if (runId) {
+      window.history.pushState(null, "", "/processing");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+  };
 
   return (
     <div className="page-grid">
@@ -255,6 +263,28 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
                 the confidence of institution-level intelligence outputs.
               </p>
             </div>
+          </div>
+
+          <div className="contribution-submit-row">
+            <button
+              type="button"
+              className="record-button"
+              onClick={handleSubmit}
+              disabled={result.submitStatus === "submitting"}
+            >
+              {result.submitStatus === "submitting" ? "Submitting..." : "Submit Contribution"}
+            </button>
+            {result.submitMessage ? (
+              <span
+                className={
+                  result.submitStatus === "error"
+                    ? "role-state-panel role-state-panel--error"
+                    : "role-state-panel"
+                }
+              >
+                {result.submitMessage}
+              </span>
+            ) : null}
           </div>
         </div>
       </SectionCard>
