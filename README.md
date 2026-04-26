@@ -4,57 +4,72 @@
 
 Compass is a privacy-preserving institutional intelligence product for repo and treasury activity on Canton. It allows institutions to contribute selected benchmark fields, generate trust-weighted benchmark intelligence, compare institution-level positioning against the active cohort, and produce auditable outputs without exposing raw proprietary positions.
 
-The current repository includes a working multi-role MVP flow for **Institution Desk**, **Operator**, and **Auditor**, backed by a FastAPI service, projection-based read models, and a Daml/Canton workflow skeleton.
+The current repository includes a working multi-role MVP across **Institution Desk**, **Operator**, and **Auditor** workflows. The FastAPI backend serves role-specific projection views, supports benchmark computation and institution-level outputs, and includes hardened lifecycle transitions for contribution, processing, release, and audit record states. The demo is seed-backed for repeatability, while the repository includes SQLAlchemy/Alembic persistence scaffolding and Canton/Daml adapter seams for future live ledger integration.
+
+---
 
 ## Problem / Solution / Why Canton
 
 | Category | Summary |
-| --- | --- |
+|---|---|
 | Problem | Institutional crypto treasury and operations teams struggle to compare liquidity, collateral structure, and repo posture to peers because privacy-first workflows fragment market intelligence. |
 | Solution | Compass collects selected contribution fields, processes them confidentially, and produces trust-weighted benchmark intelligence plus institution-scoped comparison outputs without exposing raw positions. |
 | Why Canton | Canton is built for privacy-first institutional workflows, selective disclosure, and auditable business processes, which makes it the right foundation for contribution policies, benchmark lifecycle control, and recorded intelligence outputs. |
+
+---
 
 ## Current MVP Status
 
 ### Implemented
 
-- Multi-role frontend shell
-- Institution Desk working happy path
-- Operator workflow path
-- Auditor evidence path
+- Multi-role frontend shell for Institution Desk, Operator, and Auditor
+- Working Institution Desk happy path
+- Working Operator workflow
+- Working Auditor evidence/read flow
 - FastAPI backend with role-specific endpoints
-- Projection-oriented service layer
+- Projection-oriented backend services
 - Seed-backed benchmark, processing, institution output, and audit state
-- Daml/Canton workflow skeleton for authority, disclosure, release, and audit lifecycle
+- Hardened lifecycle transitions for submissions, processing runs, releases, and audit records
+- Idempotent duplicate handling for Desk submissions, release approvals, and Record-to-Canton
+- Consistent API error handling
+- Development reset endpoint for repeatable demos
+- Backend smoke tests covering Desk, Operator, and Auditor flows
+- SQLAlchemy repository boundary and Alembic persistence scaffold
+- Daml/Canton workflow skeleton
+- Canton/Daml adapter seams for future command submission and event ingestion
 
 ### Not yet implemented
 
-- Persistent database storage
+- Fully persistent production database mode
 - Live Canton event ingestion
 - Live Daml command submission bridge
 - Production-grade confidential compute integration
-- Full export/evidence package workflow
+- Full export/evidence packaging workflow
+
+---
 
 ## Product Workflow
 
 Compass is repo-native, treasury-aware, and deterministic first. It is not a retail analytics app and it is not positioned as autonomous AI.
 
-The current product flow is organized around five core screens:
+The product flow is organized around five core screens:
 
 1. **Network Intelligence Overview**  
-   Show that privacy-preserving contribution can still generate network-wide signals.
+   Shows that privacy-preserving contribution can still generate network-wide benchmark intelligence.
 
 2. **Contribution Campaign**  
-   Define what institutions are asked to contribute and how contribution quality affects benchmark strength.
+   Defines what institutions are asked to contribute and how contribution quality affects benchmark strength.
 
 3. **Confidential Processing**  
-   Explain the trusted execution model and deterministic processing boundary.
+   Shows how selected contribution fields move through a controlled processing boundary before derived outputs are released.
 
 4. **Benchmark Intelligence**  
-   Surface anonymized aggregate signals and benchmark reliability.
+   Surfaces anonymized aggregate signals, benchmark reliability, cohort depth, and scenario-level intelligence.
 
 5. **My Position Intelligence**  
-   Compare one institution to the benchmark and produce an auditable, local explainable summary.
+   Compares one institution to the benchmark and produces an auditable, institution-scoped explainable summary.
+
+---
 
 ## Role Model
 
@@ -70,44 +85,57 @@ Reviews contribution quality, controls benchmark processing, manages release rea
 
 Inspects evidence, attestation references, release scope, retention policy status, and audit record integrity.
 
+---
+
+## Working Demo Flow
+
+The main demo path is:
+
+1. Start as **Institution Desk**
+2. Open Overview
+3. Go to Contribute Data
+4. Submit a contribution
+5. View Confidential Processing state
+6. Open Benchmark Intelligence
+7. Open My Position Intelligence
+8. Click Record to Canton
+9. Switch to Operator to inspect workflow state
+10. Switch to Auditor to inspect evidence, release scope, and audit record state
+
+The demo can be reset through the development reset endpoint:
+
+```bash
+POST /api/dev/reset-demo-state
+```
+
+---
+
 ## Repository Structure
 
 ```text
 .
-|-- README.md
-|-- LICENSE
-|-- .gitignore
-|-- docs/
-|-- frontend/
-|-- services/
-|-- canton/
-`-- quickstart/
+├── README.md
+├── LICENSE
+├── .gitignore
+├── docs/
+├── frontend/
+├── services/
+├── canton/
+└── quickstart/
 ```
 
 ### Key folders
 
-- `frontend/`: Vite frontend with role-aware Compass UI.
-- `services/crti-api/`: FastAPI backend with projections, role-specific services, and seed-backed MVP state.
-- `canton/`: Daml workflow skeleton for campaign, contribution, processing, release, institution output, and audit lifecycle.
-- `quickstart/`: Canton runtime / integration area for future network attachment.
+- `frontend/` -> Vite frontend with role-aware Compass UI
+- `services/crti-api/` -> FastAPI backend with projections, role-specific services, lifecycle guards, and seed-backed MVP state
+- `services/crti-api/app/ledger.py` -> Canton/Daml adapter seams
+- `services/crti-api/alembic/` -> persistence migration scaffold
+- `canton/` -> Daml workflow skeleton for campaign, contribution, processing, release, institution output, and audit lifecycle
+- `quickstart/` -> Canton runtime / integration area for future network attachment
 
-See [PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md) for a folder-by-folder breakdown.
+See `PROJECT_LAYOUT.md` for a folder-by-folder breakdown.
 
-## Quick Demo Instructions
-
-1. Start the backend service.
-2. Start the frontend.
-3. Open Compass in the browser.
-4. Walk the Institution Desk happy path:
-   - Overview
-   - Contribute
-   - Submit Contribution
-   - Processing
-   - Benchmark
-   - My Position
-   - Record to Canton
-5. Use the role switcher to inspect Operator and Auditor views.
-6. Verify that role-specific backend endpoints are driving the current UI state.
+---
 
 ## Frontend Instructions
 
@@ -118,7 +146,15 @@ npm install
 npm run dev
 ```
 
-The frontend expects the backend at `http://localhost:8000` by default. If the backend is unavailable, the UI can still render fallback demo states for presentation purposes, but the intended path is the live seed-backed MVP flow.
+The frontend expects the backend at:
+
+```text
+http://localhost:8000
+```
+
+If the backend is unavailable, the UI can still render fallback demo states for presentation purposes, but the intended path is the live seed-backed MVP flow.
+
+---
 
 ## Backend Service Instructions
 
@@ -136,42 +172,45 @@ Helper scripts are included:
 - Windows: `run-dev.ps1`
 - Unix-like: `run-dev.sh`
 
-The backend is currently seed-backed rather than fully persistent, but it powers the live MVP flows for Institution Desk, Operator, and Auditor. It includes role-specific endpoints, benchmark computation scaffolding, institution output generation, and audit handoff state transitions.
+The backend is currently seed-backed rather than fully persistent, but it powers the live MVP flows for Institution Desk, Operator, and Auditor.
+
+---
 
 ## Current API Surface
 
 ### Institution Desk
 
 - `GET /api/desk/overview`
-- `GET /api/desk/contribute/{campaignId}`
-- `POST /api/desk/contribute/{campaignId}/submit`
-- `GET /api/desk/processing/{runId}`
+- `GET /api/desk/contribute/:campaignId`
+- `POST /api/desk/contribute/:campaignId/submit`
+- `GET /api/desk/processing/:runId`
 - `GET /api/desk/benchmark?scenario=...`
 - `GET /api/desk/my-position?scenario=...`
-- `POST /api/desk/my-position/{outputId}/record`
+- `POST /api/desk/my-position/:outputId/record`
 
 ### Operator
 
 - `GET /api/operator/overview`
-- `GET /api/operator/campaigns/{campaignId}`
 - `GET /api/operator/submissions/pending`
-- `POST /api/operator/submissions/{submissionId}/review`
-- `GET /api/operator/processing/{runId}`
-- `POST /api/operator/processing/{campaignId}/trigger`
-- `POST /api/operator/releases/{runId}/approve`
-- `GET /api/operator/benchmark?scenario=...`
-- `GET /api/operator/institution-output/{institutionId}`
+- `POST /api/operator/submissions/:submissionId/review`
+- `GET /api/operator/processing/:runId`
+- `POST /api/operator/processing/:campaignId/trigger`
+- `POST /api/operator/releases/:runId/approve`
+- `GET /api/operator/institution-output/:institutionId`
 
 ### Auditor
 
 - `GET /api/auditor/overview`
-- `GET /api/auditor/campaigns/{campaignId}/policy`
-- `GET /api/auditor/processing/{runId}/evidence`
-- `GET /api/auditor/benchmark/{snapshotId}/audit`
-- `GET /api/auditor/institution-output/{outputId}`
-- `GET /api/auditor/audit-records/{recordId}`
+- `GET /api/auditor/processing/:runId/evidence`
+- `GET /api/auditor/benchmark/:snapshotId/audit`
+- `GET /api/auditor/institution-output/:outputId`
+- `GET /api/auditor/audit-records/:recordId`
 
-Legacy presentation endpoints are still present for compatibility with earlier demo views, but the active MVP direction is the role-specific API surface above.
+### Development
+
+- `POST /api/dev/reset-demo-state`
+
+---
 
 ## Daml / Canton Workflow Notes
 
@@ -195,11 +234,32 @@ The current Daml layer is implementation-ready scaffolding. Backend bridge seams
 - projection synchronization
 - record-to-Canton finalization handshake
 
+---
+
+## Verification
+
+Current checks:
+
+```bash
+pytest
+python -m compileall app
+npm run build
+```
+
+Backend smoke tests cover:
+
+- Institution Desk read, submit, processing, benchmark, position, and record flow
+- Operator overview, pending submission review, processing trigger, release approval, and institution output review
+- Auditor overview, processing evidence, benchmark audit, institution output audit, and audit record detail
+
+---
+
 ## Roadmap / Next Steps
 
-- Move from seed-backed state to persistent database storage.
-- Connect frontend fully across all role views to stable persisted data.
-- Add backend-to-Daml command submission.
-- Add Canton event ingestion and projection synchronization.
-- Harden workflow state transitions and edge cases.
-- Attach a real Canton runtime and upstream quickstart stack under `quickstart/`.
+- Move from seed-backed state to persistent database storage
+- Complete PostgreSQL-backed repository implementation
+- Add backend-to-Daml command submission
+- Add Canton event ingestion and projection synchronization
+- Attach a live Canton runtime under `quickstart/`
+- Add production-grade confidential compute integration
+- Add exportable audit/evidence packages

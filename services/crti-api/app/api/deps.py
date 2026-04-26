@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 from ..repository import CompassRepository, repository
+from ..ledger import LedgerCommandAdapter, NoopLedgerCommandAdapter
 from ..services.processing_flow import ProcessingFlowService
 from ..services.view_services import AuditorViewService, DeskViewService, OperatorViewService
 
@@ -8,6 +9,11 @@ from ..services.view_services import AuditorViewService, DeskViewService, Operat
 @lru_cache
 def get_repository() -> CompassRepository:
     return repository
+
+
+@lru_cache
+def get_ledger_adapter() -> LedgerCommandAdapter:
+    return NoopLedgerCommandAdapter()
 
 
 def get_desk_service() -> DeskViewService:
@@ -23,4 +29,4 @@ def get_auditor_service() -> AuditorViewService:
 
 
 def get_processing_flow() -> ProcessingFlowService:
-    return ProcessingFlowService(get_repository())
+    return ProcessingFlowService(get_repository(), get_ledger_adapter())

@@ -1,7 +1,21 @@
 from copy import deepcopy
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
+from .lifecycle import (
+    RECORD_DRAFT,
+    RECORD_FINALIZED,
+    RELEASE_APPROVED,
+    RELEASE_DRAFT,
+    RELEASE_PUBLISHED,
+    RUN_ACTIVE_STATES,
+    RUN_COMPLETED,
+    RUN_RELEASED,
+    SUBMISSION_APPROVED,
+    SUBMISSION_NEEDS_ATTESTATION,
+    SUBMISSION_REJECTED,
+    SUBMISSION_SUBMITTED,
+)
 from .schemas import (
     AttestationReferenceDTO,
     AuditRecordDTO,
@@ -14,6 +28,13 @@ from .schemas import (
 )
 
 
+class CompassRepositoryInterface(Protocol):
+    def reset(self) -> None: ...
+    def get_campaign(self, campaign_id: int = 1) -> CampaignDTO: ...
+    def get_run(self, run_id: int = 1) -> ProcessingRunDTO: ...
+    def list_submissions(self, campaign_id: int | None = None, review_status: str | None = None) -> list[ContributionSubmissionDTO]: ...
+
+
 class CompassRepository:
     """Read/write boundary for Compass services.
 
@@ -23,6 +44,9 @@ class CompassRepository:
     """
 
     def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
         now = datetime.utcnow()
         self.institutions = {
             1: InstitutionDTO(
@@ -151,7 +175,7 @@ class CompassRepository:
                 input_count=3,
                 valid_submission_count=3,
                 invalid_submission_count=0,
-                notes_json={"retry_markers": 1, "release_readiness": "ready"},
+                notes_json={"retry_markers": 1, "release_readiness": RELEASE_APPROVED, "release_status": RELEASE_APPROVED},
             )
         }
         self.snapshots = {
@@ -207,7 +231,7 @@ class CompassRepository:
                     {"title": "Assess maturity distribution", "body": "Review 8-14 day exposure under mixed repo settlement."},
                     {"title": "Record benchmark comparison", "body": "Prepare audit-linked Canton recording."},
                 ],
-                release_status="release_ready",
+                release_status=RELEASE_APPROVED,
                 created_at=now - timedelta(hours=1, minutes=30),
             ),
             2: InstitutionOutputDTO(
@@ -229,7 +253,7 @@ class CompassRepository:
                     {"title": "Monitor rate sensitivity", "body": "Keep repo rate movement within cohort variance."},
                     {"title": "Record benchmark comparison", "body": "Prepare audit-linked Canton recording."},
                 ],
-                release_status="release_ready",
+                release_status=RELEASE_APPROVED,
                 created_at=now - timedelta(hours=1, minutes=29),
             ),
             3: InstitutionOutputDTO(
@@ -251,7 +275,7 @@ class CompassRepository:
                     {"title": "Review tenor exposure", "body": "Compare 8-14 day maturities against the active cohort."},
                     {"title": "Record benchmark comparison", "body": "Prepare audit-linked Canton recording."},
                 ],
-                release_status="release_ready",
+                release_status=RELEASE_APPROVED,
                 created_at=now - timedelta(hours=1, minutes=28),
             ),
         }
@@ -272,7 +296,7 @@ class CompassRepository:
                 institution_output_id=1,
                 benchmark_snapshot_id=1,
                 attestation_reference_id=1,
-                record_status="draft",
+                record_status=RECORD_DRAFT,
                 canton_record_ref=None,
                 release_scope_json={
                     "included": ["benchmark_delta", "risk_tier", "interpretation_summary"],
@@ -299,13 +323,22 @@ class CompassRepository:
     def get_latest_run_for_campaign(self, campaign_id: int = 1) -> ProcessingRunDTO:
         return max((item for item in self.runs.values() if item.campaign_id == campaign_id), key=lambda item: item.id)
 
-    def get_snapshot(self, snapshot_id: int = 1) -> BenchmarkSnapshotDTO:
+    def get_active_run_for_campaign(self, campaign_id: int) -> ProcessingRunDTO | None:
+        return next((item for item in self.runs.values() if item.campaign_id == campaign_id and item.run_status in RUN_ACTIVE_STATES), None)
+
+    def get_latest_snapshot_for_campaign(self, campaign_id: int) -> BenchmarkSnapshotDTO:
+        return max((item for item in self.snapshots.values() if item.campaign_id == campaign_id), key=lambda item: item.id)
+
+    def get_snapshot(self, snapshot_id: int | None = None) -> BenchmarkSnapshotDTO:
+        if snapshot_id is None:
+            return max(self.snapshots.values(), key=lambda item: item.id)
         return self.snapshots[snapshot_id]
 
     def get_snapshot_by_scenario(self, scenario: str | None = None) -> BenchmarkSnapshotDTO:
         if not scenario:
-            return next(iter(self.snapshots.values()))
-        return next((item for item in self.snapshots.values() if item.scenario == scenario), next(iter(self.snapshots.values())))
+            return max(self.snapshots.values(), key=lambda item: item.id)
+        matches = [item for item in self.snapshots.values() if item.scenario == scenario]
+        return max(matches, key=lambda item: item.id) if matches else max(self.snapshots.values(), key=lambda item: item.id)
 
     def get_output(self, output_id: int = 1) -> InstitutionOutputDTO:
         return self.outputs[output_id]
@@ -339,6 +372,56 @@ class CompassRepository:
     def get_audit_record(self, record_id: int = 1) -> AuditRecordDTO:
         return self.audit_records[record_id]
 
+    def get_submission(self, submission_id: int) -> ContributionSubmissionDTO:
+        return self.submissions[submission_id]
+
+    def get_latest_submission_for_institution(self, campaign_id: int, institution_id: int) -> ContributionSubmissionDTO | None:
+        matches = [
+            item
+            for item in self.submissions.values()
+            if item.campaign_id == campaign_id and item.institution_id == institution_id
+        ]
+        return max(matches, key=lambda item: item.id) if matches else None
+
+    def _normalized_submission_payload(
+        self,
+        *,
+        institution_id: int,
+        incoming_payload: dict[str, Any],
+        latest: ContributionSubmissionDTO | None,
+    ) -> dict[str, Any]:
+        if "liquidity_score" in incoming_payload:
+            return incoming_payload
+        if latest and "liquidity_score" in latest.payload_json:
+            return {**latest.payload_json, "submitted_fields": incoming_payload}
+        demo_defaults = {
+            1: {
+                "liquidity_score": 69.1,
+                "repo_rate": 4.92,
+                "haircut": 3.1,
+                "notional": 142_000_000,
+                "collateral_structure": "UST-heavy with concentrated tenor",
+                "maturity_bucket": "8-14 days",
+            },
+            2: {
+                "liquidity_score": 76.4,
+                "repo_rate": 4.78,
+                "haircut": 2.6,
+                "notional": 188_000_000,
+                "collateral_structure": "Balanced UST and agency collateral",
+                "maturity_bucket": "4-7 days",
+            },
+            3: {
+                "liquidity_score": 72.9,
+                "repo_rate": 4.86,
+                "haircut": 3.0,
+                "notional": 121_000_000,
+                "collateral_structure": "Treasury-led collateral mix",
+                "maturity_bucket": "8-14 days",
+            },
+        }
+        return {**demo_defaults.get(institution_id, demo_defaults[1]), "submitted_fields": incoming_payload}
+
     def list_submissions(self, campaign_id: int | None = None, review_status: str | None = None) -> list[ContributionSubmissionDTO]:
         submissions = list(self.submissions.values())
         if campaign_id is not None:
@@ -347,24 +430,45 @@ class CompassRepository:
             submissions = [item for item in submissions if item.review_status == review_status]
         return submissions
 
-    def create_submission(self, campaign_id: int, institution_id: int, payload: dict[str, Any]) -> ContributionSubmissionDTO:
-        new_id = max(self.submissions, default=0) + 1
+    def create_or_update_submission(self, campaign_id: int, institution_id: int, payload: dict[str, Any]) -> tuple[ContributionSubmissionDTO, bool]:
+        latest = self.get_latest_submission_for_institution(campaign_id, institution_id)
         now = datetime.utcnow()
+        normalized_payload = self._normalized_submission_payload(
+            institution_id=institution_id,
+            incoming_payload=payload["payload"],
+            latest=latest,
+        )
+        if latest and latest.review_status in {SUBMISSION_SUBMITTED, "under_review", SUBMISSION_NEEDS_ATTESTATION}:
+            updated = latest.model_copy(
+                update={
+                    "submission_type": payload["submission_type"],
+                    "confidence_tier": payload["confidence_tier"],
+                    "payload_json": normalized_payload,
+                    "policy_status": SUBMISSION_SUBMITTED,
+                    "review_status": SUBMISSION_SUBMITTED,
+                    "attestation_status": payload.get("attestation_status", "pending"),
+                    "updated_at": now,
+                }
+            )
+            self.submissions[latest.id] = updated
+            return updated, False
+
+        new_id = max(self.submissions, default=0) + 1
         submission = ContributionSubmissionDTO(
             id=new_id,
             campaign_id=campaign_id,
             institution_id=institution_id,
             submission_type=payload["submission_type"],
             confidence_tier=payload["confidence_tier"],
-            payload_json=payload["payload"],
-            policy_status="submitted",
-            review_status="submitted",
+            payload_json=normalized_payload,
+            policy_status=SUBMISSION_SUBMITTED,
+            review_status=SUBMISSION_SUBMITTED,
             attestation_status=payload.get("attestation_status", "pending"),
             submitted_at=now,
             updated_at=now,
         )
         self.submissions[new_id] = submission
-        return submission
+        return submission, True
 
     def update_submission_review(self, submission_id: int, review_status: str, policy_status: str | None = None) -> ContributionSubmissionDTO:
         current = self.submissions[submission_id]
@@ -380,8 +484,8 @@ class CompassRepository:
 
     def create_processing_run(self, campaign_id: int, status: str = "running") -> ProcessingRunDTO:
         campaign_submissions = self.list_submissions(campaign_id=campaign_id)
-        valid = [item for item in campaign_submissions if item.review_status == "approved"]
-        invalid = [item for item in campaign_submissions if item.review_status in {"rejected", "needs_attestation"}]
+        valid = [item for item in campaign_submissions if item.review_status == SUBMISSION_APPROVED]
+        invalid = [item for item in campaign_submissions if item.review_status in {SUBMISSION_REJECTED, SUBMISSION_NEEDS_ATTESTATION}]
         new_id = max(self.runs, default=0) + 1
         now = datetime.utcnow()
         run = ProcessingRunDTO(
@@ -396,7 +500,7 @@ class CompassRepository:
             input_count=len(campaign_submissions),
             valid_submission_count=len(valid),
             invalid_submission_count=len(invalid),
-            notes_json={"retry_markers": 0, "release_readiness": "release_pending", "release_status": "draft"},
+            notes_json={"retry_markers": 0, "release_readiness": RELEASE_DRAFT, "release_status": RELEASE_DRAFT},
         )
         self.runs[new_id] = run
         attestation_id = max(self.attestations, default=0) + 1
@@ -420,7 +524,7 @@ class CompassRepository:
         updated = current.model_copy(
             update={
                 "run_status": status,
-                "finished_at": datetime.utcnow() if status in {"completed", "release_pending", "released"} else current.finished_at,
+                "finished_at": datetime.utcnow() if status in {RUN_COMPLETED, "release_pending", RUN_RELEASED} else current.finished_at,
                 "notes_json": notes,
             }
         )
@@ -432,13 +536,85 @@ class CompassRepository:
             if output.processing_run_id == run_id:
                 self.outputs[output_id] = output.model_copy(update={"release_status": release_status})
 
+    def create_or_update_output_for_submission(
+        self,
+        *,
+        processing_run_id: int,
+        snapshot: BenchmarkSnapshotDTO,
+        submission: ContributionSubmissionDTO,
+        comparison: dict[str, str | float],
+        interpretation: str,
+    ) -> InstitutionOutputDTO:
+        current = next(
+            (
+                item
+                for item in self.outputs.values()
+                if item.institution_id == submission.institution_id and item.benchmark_snapshot_id == snapshot.id
+            ),
+            None,
+        )
+        payload = submission.payload_json
+        update = {
+            "processing_run_id": processing_run_id,
+            "institution_id": submission.institution_id,
+            "benchmark_snapshot_id": snapshot.id,
+            "my_liquidity_score": float(payload.get("liquidity_score", 0)),
+            "network_average": snapshot.average_liquidity,
+            "delta_vs_benchmark": float(comparison["delta_vs_benchmark"]),
+            "risk_tier": str(comparison["risk_tier"]),
+            "confidence_level": str(comparison["confidence_level"]),
+            "collateral_structure": str(payload.get("collateral_structure", "Not provided")),
+            "maturity_bucket": str(payload.get("maturity_bucket", "Not provided")),
+            "suggested_interpretation": interpretation,
+            "explainable_summary": interpretation,
+            "recommended_actions_json": [
+                {"title": "Review benchmark delta", "body": "Compare institution output against approved benchmark release."},
+                {"title": "Record benchmark comparison", "body": "Finalize the institution-scoped audit record when ready."},
+            ],
+            "release_status": RELEASE_DRAFT,
+            "created_at": datetime.utcnow(),
+        }
+        if current:
+            updated = current.model_copy(update=update)
+            self.outputs[current.id] = updated
+            return updated
+        new_id = max(self.outputs, default=0) + 1
+        output = InstitutionOutputDTO(id=new_id, **update)
+        self.outputs[new_id] = output
+        return output
+
+    def create_or_get_audit_record_for_output(self, output_id: int, created_by: str = "institution_desk") -> AuditRecordDTO:
+        current = self.get_audit_record_for_output(output_id)
+        if current:
+            return current
+        output = self.get_output(output_id)
+        attestation = self.get_attestation_for_run(output.processing_run_id)
+        new_id = max(self.audit_records, default=0) + 1
+        record = AuditRecordDTO(
+            id=new_id,
+            institution_output_id=output.id,
+            benchmark_snapshot_id=output.benchmark_snapshot_id,
+            attestation_reference_id=attestation.id,
+            record_status=RECORD_DRAFT,
+            canton_record_ref=None,
+            release_scope_json={
+                "included": ["benchmark_delta", "risk_tier", "interpretation_summary"],
+                "excluded": ["raw_peer_contributions", "raw_institution_payload", "desk_recommendation_blocks"],
+            },
+            created_at=datetime.utcnow(),
+            recorded_at=None,
+            created_by=created_by,
+        )
+        self.audit_records[new_id] = record
+        return record
+
     def update_audit_record_status(self, record_id: int, status: str, canton_ref: str | None = None) -> AuditRecordDTO:
         current = self.audit_records[record_id]
         updated = current.model_copy(
             update={
                 "record_status": status,
                 "canton_record_ref": canton_ref,
-                "recorded_at": datetime.utcnow() if status == "finalized" else current.recorded_at,
+                "recorded_at": datetime.utcnow() if status == RECORD_FINALIZED and current.recorded_at is None else current.recorded_at,
             }
         )
         self.audit_records[record_id] = updated

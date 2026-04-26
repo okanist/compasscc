@@ -200,6 +200,7 @@ class AuditorViewService(BaseViewService):
                 ActionDTO(title="Open Evidence Package", body="Inspect attestation-linked output."),
                 ActionDTO(title="View Audit Trail", body="Open event history for this output."),
             ],
+            include_recommendations=False,
         )
 
     def get_audit_record(self, record_id: int):

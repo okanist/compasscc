@@ -24,4 +24,5 @@ frontend/.env
 frontend/.env.*
 services/crti-api/.env
 services/crti-api/.env.*
+!services/crti-api/.env.example
 

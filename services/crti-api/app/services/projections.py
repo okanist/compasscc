@@ -101,7 +101,13 @@ class ProjectionFactory:
             actions=actions,
         )
 
-    def institution_output_projection(self, institution_id: int, scenario: str | None, actions: list[ActionDTO]) -> InstitutionOutputProjection:
+    def institution_output_projection(
+        self,
+        institution_id: int,
+        scenario: str | None,
+        actions: list[ActionDTO],
+        include_recommendations: bool = True,
+    ) -> InstitutionOutputProjection:
         snapshot = self.repo.get_snapshot_by_scenario(scenario)
         output = self.repo.get_output_for_institution(institution_id, snapshot.id)
         audit_record = self.repo.get_audit_record_for_output(output.id)
@@ -119,7 +125,7 @@ class ProjectionFactory:
             ],
             interpretation=output.suggested_interpretation,
             explainable_summary=output.explainable_summary,
-            recommended_actions=output.recommended_actions_json,
+            recommended_actions=output.recommended_actions_json if include_recommendations else [],
             audit_handoff=[
                 "Benchmark snapshot reference available",
                 "Institution-scoped output package ready",

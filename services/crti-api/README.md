@@ -42,19 +42,48 @@ Role-specific endpoint scaffolds:
 - `GET /api/auditor/benchmark/{snapshot_id}/audit`
 - `GET /api/auditor/institution-output/{output_id}`
 - `GET /api/auditor/audit-records/{record_id}`
+- `POST /api/dev/reset-demo-state`
 
 ## Structure
 
 - `app/domain/models.py`: SQLAlchemy entities for normalized storage
 - `app/schemas.py`: DTOs and UI projection serializers
 - `app/repository.py`: seed-backed repository boundary
+- `app/sqlalchemy_repository.py`: PostgreSQL-ready repository scaffold
+- `app/ledger.py`: Daml/Canton command and event adapter interfaces
+- `app/lifecycle.py`: shared lifecycle states and transition groups
 - `app/services/computation.py`: benchmark, reliability, comparison, interpretation, and alert services
 - `app/services/projections.py`: read-optimized projection factories
 - `app/services/view_services.py`: desk, operator, and auditor view services
 - `app/services/processing_flow.py`: async workflow boundary scaffolding
 - `app/api`: FastAPI routers
 
-TODO markers identify the Canton event-ingestion and Daml command-integration seams.
+TODO markers identify the Canton event-ingestion, Daml command-integration, projection synchronization, and ledger checkpointing seams.
+
+## State and integration readiness
+
+The seed repository remains the default development/demo mode. Command handlers guard duplicate and invalid lifecycle transitions for submissions, processing runs, releases, and audit records. Duplicate Desk submissions update the open contribution; terminal submissions require a new explicit version. Record-to-Canton is idempotent and returns the existing finalized record on repeated clicks.
+
+Persistence scaffolding is included through SQLAlchemy models, `SQLAlchemyCompassRepository`, Alembic setup, and `.env.example`:
+
+```bash
+cp .env.example .env
+alembic upgrade head
+```
+
+Set `DATABASE_URL` to a PostgreSQL URL when replacing the seed-backed repository.
+
+For repeatable demos:
+
+```bash
+curl -X POST http://localhost:8000/api/dev/reset-demo-state
+```
+
+Smoke tests cover the Desk, Operator, and Auditor demo paths:
+
+```bash
+pytest
+```
 
 ## Run
 
