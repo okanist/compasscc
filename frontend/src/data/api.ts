@@ -5,6 +5,7 @@ import type {
   BenchmarkData,
   CampaignData,
   CommandResult,
+  NavKey,
   OperatorPendingSubmission,
   OverviewData,
   PositionData,
@@ -37,18 +38,45 @@ function titleCase(value: string | undefined): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter: string) => letter.toUpperCase());
 }
 
+function navKey(value: unknown): NavKey | undefined {
+  return value === "overview" || value === "campaign" || value === "processing" || value === "benchmark" || value === "position"
+    ? value
+    : undefined;
+}
+
+function recentRouteFromCategory(category: unknown): NavKey | undefined {
+  if (category === "network_liquidity") {
+    return "benchmark";
+  }
+
+  if (category === "institution_benchmark") {
+    return "position";
+  }
+
+  if (category === "processing_reliability") {
+    return "processing";
+  }
+
+  return undefined;
+}
+
 function mapOverviewProjection(payload: any): OverviewData {
   const summaries = Array.isArray(payload.summaries) ? payload.summaries : [];
+  const overviewSections = payload.overview_sections ?? {};
+  const benchmark = overviewSections.benchmark ?? {};
+  const networkIntelligence = overviewSections.network_intelligence ?? {};
 
   return {
     kpis: (payload.metrics ?? []).map((metric: any) => ({
       label: metric.label,
       value: metric.value,
+      detail: metric.detail,
       tone: metric.tone
     })),
     informationBand: {
       title: "Privacy-Preserving Institutional Contribution",
       body:
+        summaries[1] ??
         summaries[0] ??
         "Institutions contribute selected fields under policy. Raw positions never leave the confidential boundary."
     },
@@ -58,12 +86,52 @@ function mapOverviewProjection(payload: any): OverviewData {
       "Trust-Weighted Benchmark",
       "Position Intelligence",
       "Auditable Output"
-    ]
+    ],
+    deskOverview: {
+      benchmark: {
+        title: benchmark.title,
+        averageLiquidity: benchmark.average_liquidity,
+        delta: benchmark.delta,
+        topQuartile: benchmark.top_quartile,
+        median: benchmark.median,
+        bottomQuartile: benchmark.bottom_quartile,
+        interpretation: benchmark.interpretation
+      },
+      networkIntelligence: {
+        subtitle: networkIntelligence.subtitle,
+        eyebrow: networkIntelligence.eyebrow,
+        headline: networkIntelligence.headline,
+        body: networkIntelligence.body,
+        route: navKey(networkIntelligence.route)
+      },
+      contributionCards: (overviewSections.contribution_cards ?? []).map((card: any) => ({
+        title: card.title,
+        status: card.status,
+        action: card.action,
+        tone: card.tone
+      })),
+      recentIntelligence: (overviewSections.recent_intelligence ?? []).map((item: any) => {
+        if (typeof item === "string") {
+          return { title: item };
+        }
+
+        return {
+          category: item.category,
+          title: item.title,
+          meta: item.meta,
+          route: navKey(item.route) ?? recentRouteFromCategory(item.category)
+        };
+      })
+    }
   };
 }
 
 function mapCampaignProjection(payload: any): CampaignData {
-  const latestSubmission = payload.submissions?.[payload.submissions.length - 1];
+  const ownSubmissions = (payload.submissions ?? []).filter((submission: any) => submission.institution_id === 1);
+  const latestSubmission = ownSubmissions[ownSubmissions.length - 1] ?? payload.submissions?.[payload.submissions.length - 1];
+  const packageData = payload.contribution_package ?? {};
+  const policyData = payload.contribution_policy ?? {};
+  const policyTypes = policyData.contribution_types ?? [];
 
   return {
     id: payload.campaign.id,
@@ -71,41 +139,151 @@ function mapCampaignProjection(payload: any): CampaignData {
     scenario: payload.campaign.scenario,
     requestedFields: payload.requested_fields ?? [],
     minimumReputationThreshold: `${payload.campaign.min_reputation_threshold.toFixed(2)} network trust score`,
-    contributionReward: "Benchmark access uplift + campaign incentive credit",
-    contributionTypes: ["Self-reported", "System-signed", "Oracle / custodian-attested"],
+    contributionReward: policyData.contribution_reward ?? "Benchmark access after contribution acceptance",
+    contributionTypes: policyTypes.length
+      ? policyTypes.map((item: any) => item.type)
+      : ["Self-reported", "System-signed", "Oracle / custodian-attested"],
     policySummary: payload.policy_summary,
     participationStatus: latestSubmission
       ? `${titleCase(latestSubmission.review_status)} (${latestSubmission.submission_type})`
-      : "Not submitted",
+      : "Ready to Submit",
     contributorQualityTier: latestSubmission?.policy_status ? titleCase(latestSubmission.policy_status) : "Ready",
-    confidenceTier: payload.campaign.confidence_tier_required,
-    teeProcessingEnabled: payload.campaign.tee_processing_enabled ? "Yes" : "No",
+    confidenceTier: packageData.confidence_tier ?? payload.campaign.confidence_tier_required,
+    teeProcessingEnabled: packageData.confidential_processing ?? (payload.campaign.tee_processing_enabled ? "Enabled" : "Disabled"),
     latestSubmissionStatus: latestSubmission?.review_status,
-    processingRunId: 1
+    selectedContributionType: packageData.selected_type ?? latestSubmission?.submission_type ?? "System-signed",
+    attestationStatus: packageData.attestation_status ?? (latestSubmission?.attestation_status ? titleCase(latestSubmission.attestation_status) : "System Signed"),
+    rawDataRetention: packageData.raw_data_retention,
+    processingRunId: 1,
+    contributionPackage: {
+      status: packageData.status ?? (latestSubmission ? titleCase(latestSubmission.review_status) : "Ready"),
+      selectedType: packageData.selected_type ?? latestSubmission?.submission_type ?? "System-signed",
+      confidenceTier: packageData.confidence_tier ?? payload.campaign.confidence_tier_required,
+      attestationStatus: packageData.attestation_status ?? (latestSubmission?.attestation_status ? titleCase(latestSubmission.attestation_status) : "System Signed"),
+      rawDataRetention:
+        packageData.raw_data_retention ??
+        "Raw package values are not displayed or retained outside the confidential processing boundary.",
+      confidentialProcessing: packageData.confidential_processing ?? (payload.campaign.tee_processing_enabled ? "Enabled" : "Disabled"),
+      previewFields: (packageData.preview_fields ?? []).map((field: any) => ({
+        field: field.field,
+        status: field.status,
+        previewValue: field.preview_value,
+        transformation: field.transformation,
+        eligibleForScoring: Boolean(field.eligible_for_scoring)
+      }))
+    },
+    contributionPolicy: {
+      contributionTypes: policyTypes.map((item: any) => ({
+        type: item.type,
+        benchmarkWeight: item.benchmark_weight,
+        trustClass: item.trust_class,
+        policyStatus: item.policy_status,
+        explanation: item.explanation,
+        attestationStatus: item.attestation_status
+      })),
+      eligibilityRules: (policyData.eligibility_rules ?? []).map((rule: any) => ({
+        label: rule.label,
+        status: rule.status
+      })),
+      submissionWeights: (policyData.submission_weights ?? []).map((item: any) => ({
+        type: item.type,
+        weight: item.weight,
+        treatment: item.treatment
+      })),
+      qualityNote: policyData.quality_note ?? ""
+    }
   };
 }
 
 function mapProcessingProjection(payload: any): ProcessingData {
   const run = payload.run;
   const evidenceRefs = payload.evidence_refs ?? [];
+  const context = payload.processing_context ?? {};
+  const contributionReceived = Boolean(context.contribution_received);
+  const benchmarkReady = Boolean(context.benchmark_ready);
+  const waitingSteps = [
+    {
+      label: "Run status",
+      value: context.contribution_received ? "Contribution package received" : "Waiting for contribution",
+      status: context.contribution_received ? "Received" : "Waiting",
+      tone: context.contribution_received ? "warm" : "neutral",
+      evidence: context.contribution_received ? "Prepared package submitted" : "No package received"
+    },
+    {
+      label: "Contribution package received",
+      value: context.contribution_received ? "Received" : "Not received",
+      status: context.contribution_received ? "Received" : "Not received",
+      tone: context.contribution_received ? "warm" : "neutral",
+      evidence: context.contribution_status ?? "Not received"
+    },
+    {
+      label: "Simulated TEE boundary",
+      value: context.simulated_tee_status ?? "Standby",
+      status: contributionReceived ? "Standby" : "Waiting",
+      tone: contributionReceived ? "cool" : "neutral",
+      evidence: "TEE-enabled confidential boundary simulation"
+    },
+    {
+      label: "Policy checks",
+      value: context.policy_checks ?? "Not started",
+      status: context.policy_checks ?? "Not started",
+      tone: contributionReceived ? "success" : "neutral",
+      evidence: contributionReceived ? "Selected fields match campaign policy" : "Waiting for submitted package"
+    },
+    {
+      label: "Raw data retention",
+      value: context.retention ?? "None outside confidential boundary",
+      status: "Enforced",
+      tone: "success",
+      evidence: "No raw package values exposed"
+    },
+    {
+      label: "Benchmark readiness",
+      value: context.benchmark_readiness ?? "Not ready",
+      status: benchmarkReady ? "Ready" : "Not ready",
+      tone: benchmarkReady ? "success" : "neutral",
+      evidence: benchmarkReady ? "Derived benchmark output available" : "Waiting for benchmark release"
+    }
+  ];
 
   return {
     runId: run.id,
     status: run.run_status,
-    headline: "Raw data goes in. Only intelligence comes out.",
+    metrics: payload.metrics ?? [],
+    headline: run.run_status === "not_started" && !contributionReceived ? "Waiting for contribution package." : "Contribution package received.",
     body:
-      "Compass uses confidential processing to ingest contribution fields inside a controlled environment, execute deterministic analytics, and return only derived benchmark intelligence plus institution-scoped outputs.",
+      context.safe_summary ??
+      (run.run_status === "not_started"
+        ? "Confidential processing has not started because Alpha Bank has not submitted its prepared contribution package yet."
+        : "Compass uses confidential processing to ingest contribution fields inside a controlled environment, execute deterministic analytics, and return only derived benchmark intelligence plus institution-scoped outputs."),
     evidenceRefs,
-    steps: [
-      { label: "Run status", value: titleCase(run.run_status) },
-      { label: "Raw institutional data received", value: `${run.input_count} selected contribution packages accepted` },
-      { label: "Processed inside confidential environment", value: titleCase(run.runtime_mode) },
-      { label: "Persistent storage disabled", value: titleCase(run.retention_policy_status) },
-      { label: "Deterministic engine executed", value: `${run.valid_submission_count} valid / ${run.invalid_submission_count} invalid inputs` },
-      { label: "Derived outputs generated", value: payload.lifecycle?.[3] ?? "Institution outputs generated" },
-      { label: "Attestation reference", value: run.attestation_ref ?? evidenceRefs[0] ?? "Pending" },
-      { label: "Raw data retention", value: "None" }
-    ]
+    context: {
+      campaignTitle: context.campaign_title,
+      contributionType: context.contribution_type,
+      contributionStatus: context.contribution_status,
+      contributionReceived,
+      simulatedTeeStatus: context.simulated_tee_status,
+      policyChecks: context.policy_checks,
+      benchmarkReadiness: context.benchmark_readiness,
+      benchmarkReady,
+      rawDataExposure: context.raw_data_exposure,
+      retention: context.retention,
+      attestationRef: context.attestation_ref,
+      safeSummary: context.safe_summary,
+      disclosureSummary: context.disclosure_summary,
+      releasedScope: context.released_scope
+    },
+    steps: run.run_status === "not_started"
+      ? waitingSteps
+      : [
+          { label: "Run status", value: titleCase(run.run_status), status: benchmarkReady ? "Ready" : titleCase(run.run_status), tone: benchmarkReady ? "success" : "cool", evidence: titleCase(run.run_status) },
+          { label: "Contribution package received", value: `${run.input_count} selected contribution packages accepted`, status: "Received", tone: "warm", evidence: context.contribution_status ?? "Received" },
+          { label: "Simulated TEE boundary", value: titleCase(run.runtime_mode), status: "Completed", tone: "success", evidence: "TEE-enabled confidential boundary simulation" },
+          { label: "Policy checks", value: context.policy_checks ?? "Passed", status: context.policy_checks ?? "Passed", tone: "success", evidence: "Selected fields match campaign policy" },
+          { label: "Raw data retention", value: "None outside confidential boundary", status: "Enforced", tone: "success", evidence: titleCase(run.retention_policy_status) },
+          { label: "Benchmark readiness", value: context.benchmark_readiness ?? "Ready", status: benchmarkReady ? "Ready" : "Not ready", tone: benchmarkReady ? "success" : "neutral", evidence: payload.lifecycle?.[3] ?? "Institution outputs generated" },
+          { label: "Attestation reference", value: run.attestation_ref ?? evidenceRefs[0] ?? context.attestation_ref ?? "ATT-SIM-0001", status: "Issued", tone: "warm", evidence: run.attestation_ref ?? context.attestation_ref ?? "ATT-SIM-0001" }
+        ]
   };
 }
 
@@ -143,14 +321,11 @@ export async function getDeskCampaign(campaignId = 1): Promise<CampaignData> {
 export async function submitDeskContribution(
   campaignId: number,
   submissionType: string,
-  requestedFields: string[]
+  requestedFields: string[],
+  previewFields: NonNullable<CampaignData["contributionPackage"]>["previewFields"] = []
 ): Promise<CommandResult> {
-  const payload = Object.fromEntries(
-    requestedFields.map((field, index) => [
-      field,
-      index === 0 ? "142M-188M" : index === 1 ? 4.92 : index === 2 ? "UST-heavy" : index === 3 ? "8-14 days" : "18.5%"
-    ])
-  );
+  const previewMap = new Map(previewFields.map((field) => [field.field, field.previewValue]));
+  const payload = Object.fromEntries(requestedFields.map((field) => [field, previewMap.get(field) ?? "Prepared policy field"]));
 
   return apiFetch(`/api/desk/contribute/${campaignId}/submit`, {
     method: "POST",

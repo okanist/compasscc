@@ -1,13 +1,14 @@
 import { InstitutionalNetworkAnimation } from "../../../components/InstitutionalNetworkAnimation";
 import { ViewState } from "../../../components/primitives/ViewState";
-import type { OverviewData } from "../../../data/types";
+import type { NavKey, OverviewData } from "../../../data/types";
 import { useDeskOverview } from "../hooks";
 
 interface DeskOverviewViewProps {
   data: OverviewData;
+  onNavigate: (key: NavKey) => void;
 }
 
-export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
+export function DeskOverviewView({ data: initialData, onNavigate }: DeskOverviewViewProps) {
   const result = useDeskOverview(initialData);
 
   if (result.status !== "ready" || !result.data) {
@@ -16,50 +17,61 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
 
   const data = result.data;
   const kpiMap = new Map(data.kpis.map((kpi) => [kpi.label, kpi.value]));
+  const kpiToneMap = new Map(data.kpis.map((kpi) => [kpi.label, kpi.tone ?? "neutral"]));
+  const deskOverview = data.deskOverview;
+  const benchmark = deskOverview?.benchmark;
+  const networkIntelligence = deskOverview?.networkIntelligence;
+  const metricValue = (label: string, fallback = "N/A") => kpiMap.get(label) ?? fallback;
   const primaryStats = [
     {
       label: "Benchmark Reliability",
-      value: kpiMap.get("Benchmark Reliability") ?? "91.4%",
+      value: metricValue("Benchmark Reliability"),
       detail: "Trust-weighted cohort quality based on contribution depth and attestation coverage",
       emphasis: "primary" as const
     },
     {
       label: "Attested Coverage",
-      value: "68%",
+      value: metricValue("Attested Coverage"),
       detail: "Share of contributors with system-signed or externally attested inputs"
     },
     {
       label: "Cohort Depth",
-      value: kpiMap.get("Total Contributors") ?? "28",
+      value: metricValue("Cohort Depth"),
       detail: "Active participants contributing to the current benchmark cycle"
     },
     {
       label: "Active Campaigns",
-      value: kpiMap.get("Active Intelligence Campaigns") ?? "3",
+      value: metricValue("Active Campaigns"),
       detail: "Open contribution windows across current reporting scenarios"
     }
   ];
   const secondaryStatus = [
-    { label: "Network Liquidity", value: "Stable", tone: "neutral" },
-    { label: "Dispersion", value: "Elevated", tone: "warning" },
-    { label: "Confidential Boundary", value: "Active", tone: "positive" },
-    { label: "Last Refresh", value: "4 min ago", tone: "neutral" }
+    { label: "Network Liquidity", value: metricValue("Network Liquidity"), tone: kpiToneMap.get("Network Liquidity") ?? "neutral" },
+    { label: "Dispersion", value: metricValue("Dispersion"), tone: kpiToneMap.get("Dispersion") ?? "warning" },
+    { label: "Confidential Boundary", value: metricValue("Confidential Boundary"), tone: kpiToneMap.get("Confidential Boundary") ?? "positive" },
+    { label: "Last Refresh", value: metricValue("Last Refresh"), tone: kpiToneMap.get("Last Refresh") ?? "neutral" }
   ];
   const benchmarkStats = [
-    { label: "Top Quartile", value: "81.2" },
-    { label: "Median", value: "73.8" },
-    { label: "Bottom Quartile", value: "62.4" }
+    { label: "Top Quartile", value: benchmark?.topQuartile ?? "N/A" },
+    { label: "Median", value: benchmark?.median ?? "N/A" },
+    { label: "Bottom Quartile", value: benchmark?.bottomQuartile ?? "N/A" }
   ];
-  const contributionCards = [
-    { title: "Liquidity Contribution", status: "Submitted Apr 15", action: "Completed", tone: "success" },
-    { title: "Collateral Profile", status: "Attestation window open", action: "Review & Attest", tone: "action" },
-    { title: "Treasury Duration", status: "Next contribution cycle in 4 days", action: "Prepare Draft", tone: "ghost" }
+  const contributionCards = deskOverview?.contributionCards?.length ? deskOverview.contributionCards : [
+    { title: "Liquidity Contribution", status: metricValue("Own Contribution Status", "Not submitted"), action: "Submit Contribution", tone: "action" as const }
   ];
-  const intelligenceItems = [
-    "Repo liquidity remains resilient despite higher tenor dispersion across attested contributors.",
-    "Treasury-heavy desks are widening haircut assumptions in mixed collateral scenarios.",
-    "Confidential processing reliability remains above target for the active campaign cohort."
-  ];
+  const handleContributionAction = () => onNavigate("campaign");
+  const routeFromRecentCategory = (category?: string): NavKey => {
+    if (category === "institution_benchmark") {
+      return "position";
+    }
+
+    if (category === "processing_reliability") {
+      return "processing";
+    }
+
+    return "benchmark";
+  };
+  const networkRoute = networkIntelligence?.route ?? "benchmark";
 
   return (
     <div className="page-grid overview-page">
@@ -115,18 +127,18 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
                 <h3>Liquidity Benchmark</h3>
                 <p>Trust-weighted benchmark for the repo-with-treasury-collateral cohort</p>
               </div>
-              <a href="#benchmark" className="text-link">
+              <button type="button" className="text-link text-link--button" onClick={() => onNavigate("benchmark")}>
                 View Details
-              </a>
+              </button>
             </div>
 
             <div className="benchmark-callout">
               <div className="benchmark-callout__primary">
-                <strong>73.8</strong>
+                <strong>{benchmark?.averageLiquidity ?? "N/A"}</strong>
                 <span>Average Liquidity Score</span>
               </div>
               <div className="benchmark-callout__delta">
-                <strong>+4.7 pts vs. peer median</strong>
+                <strong>{benchmark?.delta ?? metricValue("Own Benchmark Teaser")}</strong>
               </div>
             </div>
 
@@ -176,7 +188,7 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
             </div>
 
             <p className="benchmark-interpretation">
-              Liquidity score sits in the upper half of the active cohort
+              {benchmark?.interpretation ?? "Liquidity score reflects the active cohort benchmark."}
             </p>
           </section>
 
@@ -186,9 +198,9 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
                 <h3>Contribution Status</h3>
                 <p>Q2 2026 contribution cycle</p>
               </div>
-              <a href="#campaign" className="text-link">
+              <button type="button" className="text-link text-link--button" onClick={() => onNavigate("campaign")}>
                 View All
-              </a>
+              </button>
             </div>
 
             <div className="contribution-card-grid">
@@ -208,7 +220,7 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
                   </div>
                   <h4>{card.title}</h4>
                   <p>{card.status}</p>
-                  <button type="button" className={`inline-action inline-action--${card.tone}`}>
+                  <button type="button" className={`inline-action inline-action--${card.tone ?? "action"}`} onClick={handleContributionAction}>
                     {card.action}
                   </button>
                 </article>
@@ -220,13 +232,11 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
             <div className="insight-panel__header">
               <div>
                 <h3>Institutional Network Intelligence</h3>
-                <p>
-                  Strategic interpretation of anonymized contribution across the active benchmark cohort
-                </p>
+                <p>{networkIntelligence?.subtitle ?? data.informationBand.title}</p>
               </div>
-              <a href="#position" className="text-link">
+              <button type="button" className="text-link text-link--button" onClick={() => onNavigate(networkRoute)}>
                 Explore Network
-              </a>
+              </button>
             </div>
 
             <div className="network-panel__body">
@@ -235,16 +245,14 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
               </div>
 
               <div className="network-copy">
-                <span className="eyebrow">Strategic Network Signal</span>
+                <span className="eyebrow">{networkIntelligence?.eyebrow ?? data.informationBand.title}</span>
                 <h4>
-                  The desk remains within acceptable network liquidity bounds, but funding efficiency
-                  trails peers under mixed repo and treasury collateral conditions.
+                  {networkIntelligence?.headline ?? data.informationBand.body}
                 </h4>
                 <p>
-                  Anonymized contribution continues to produce benchmark-level intelligence without
-                  exposing institution-level positions.
+                  {networkIntelligence?.body ?? data.processStrip.join(" / ")}
                 </p>
-                <button type="button" className="inline-action inline-action--action">
+                <button type="button" className="inline-action inline-action--action" onClick={() => onNavigate(networkRoute)}>
                   View Analysis
                 </button>
               </div>
@@ -257,14 +265,19 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
                 <h3>Recent Intelligence</h3>
                 <p>Recent benchmark and explanation updates</p>
               </div>
-              <a href="#overview" className="text-link">
+              <button type="button" className="text-link text-link--button" onClick={() => onNavigate("benchmark")}>
                 View All Updates
-              </a>
+              </button>
             </div>
 
             <div className="recent-list">
-              {intelligenceItems.map((item, index) => (
-                <article key={item} className="recent-item">
+              {(deskOverview?.recentIntelligence ?? []).map((item) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  className="recent-item recent-item--button"
+                  onClick={() => onNavigate(item.route ?? routeFromRecentCategory(item.category))}
+                >
                   <div className="recent-item__icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" role="presentation">
                       <path
@@ -278,16 +291,10 @@ export function DeskOverviewView({ data: initialData }: DeskOverviewViewProps) {
                     </svg>
                   </div>
                   <div>
-                    <strong>{item}</strong>
-                    <span>
-                      {index === 0
-                        ? "Updated 12 minutes ago"
-                        : index === 1
-                          ? "Campaign note from operator"
-                          : "Reliability checkpoint passed"}
-                    </span>
+                    <strong>{item.title}</strong>
+                    {item.meta ? <span>{item.meta}</span> : null}
                   </div>
-                </article>
+                </button>
               ))}
             </div>
           </section>

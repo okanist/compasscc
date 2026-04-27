@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ViewState } from "../../../components/primitives/ViewState";
 import { SectionCard } from "../../../components/SectionCard";
 import type { CampaignData } from "../../../data/types";
@@ -62,13 +62,68 @@ const submissionWeights = [
 export function DeskContributeView({ data: initialData }: DeskContributeViewProps) {
   const result = useDeskContribute(initialData);
   const [selectedType, setSelectedType] = useState<keyof typeof contributionImpact>("System-signed");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const packagePreviewRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const backendType = result.data?.selectedContributionType;
+
+    if (backendType && backendType in contributionImpact) {
+      setSelectedType(backendType as keyof typeof contributionImpact);
+    }
+  }, [result.data?.selectedContributionType]);
+
+  const handleConfirmSubmit = useCallback(async () => {
+    setConfirmOpen(false);
+    await result.submit(selectedType);
+  }, [result, selectedType]);
+
+  const data = result.data ?? initialData;
+  const terminalSubmission = data.latestSubmissionStatus === "approved" || data.latestSubmissionStatus === "rejected";
+  const openSubmission = data.latestSubmissionStatus === "submitted" || data.latestSubmissionStatus === "under_review";
+  const submitLabel = result.submitStatus === "submitting"
+    ? "Submitting..."
+    : terminalSubmission
+      ? "View Submitted Package"
+      : openSubmission
+        ? "Update Contribution Package"
+        : "Submit Contribution";
+  const handlePrimaryAction = useCallback(() => {
+    if (terminalSubmission) {
+      packagePreviewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    setConfirmOpen(true);
+  }, [terminalSubmission]);
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("compass:contribution-action-label", {
+        detail: { label: submitLabel }
+      })
+    );
+  }, [submitLabel]);
+
+  useEffect(() => {
+    const handleTopBarSubmit = () => {
+      handlePrimaryAction();
+    };
+
+    window.addEventListener("compass:submit-contribution", handleTopBarSubmit);
+    return () => window.removeEventListener("compass:submit-contribution", handleTopBarSubmit);
+  }, [handlePrimaryAction]);
 
   if (result.status !== "ready" || !result.data) {
     return <ViewState result={result} title="Institution Desk Contribution">{() => null}</ViewState>;
   }
 
-  const data = result.data;
-  const selectedImpact = contributionImpact[selectedType];
+  const policyTypes = data.contributionPolicy?.contributionTypes ?? [];
+  const policyImpact = policyTypes.find((item) => item.type === selectedType);
+  const selectedImpact = policyImpact ?? contributionImpact[selectedType];
+  const eligibilityRules = data.contributionPolicy?.eligibilityRules ?? [];
+  const submissionWeights = data.contributionPolicy?.submissionWeights ?? [];
+  const previewFields = data.contributionPackage?.previewFields ?? [];
   const availableContributionTypes = data.contributionTypes.filter(
     (type): type is keyof typeof contributionImpact => type in contributionImpact
   );
@@ -76,14 +131,8 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
     availableContributionTypes.length > 0
       ? availableContributionTypes
       : (Object.keys(contributionImpact) as Array<keyof typeof contributionImpact>);
-  const handleSubmit = async () => {
-    const runId = await result.submit(selectedType);
-
-    if (runId) {
-      window.history.pushState(null, "", "/processing");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    }
-  };
+  const confirmationActionLabel = openSubmission ? "Update Package" : "Submit Package";
+  const fieldCount = previewFields.length || data.requestedFields.length;
 
   return (
     <div className="page-grid">
@@ -121,25 +170,65 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
             <strong>{data.confidenceTier}</strong>
           </div>
           <div className="metric-block">
-            <span className="eyebrow">TEE Processing Enabled</span>
+            <span className="eyebrow">Confidential Processing Enabled</span>
             <strong>{data.teeProcessingEnabled}</strong>
+          </div>
+          <div className="metric-block">
+            <span className="eyebrow">Attestation Status</span>
+            <strong>{data.attestationStatus ?? data.contributionPackage?.attestationStatus ?? "Pending"}</strong>
+          </div>
+          <div className="metric-block">
+            <span className="eyebrow">Raw Data Retention</span>
+            <strong>{data.rawDataRetention ?? data.contributionPackage?.rawDataRetention ?? "None outside confidential boundary"}</strong>
           </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Requested Fields">
-        <div className="tag-list">
-          {data.requestedFields.map((field) => (
-            <span key={field} className="tag">
-              {field}
-            </span>
+      <SectionCard
+        title="Contribution Package / Submission Preview"
+        subtitle="Alpha Bank reviews selected benchmark fields prepared for this campaign. Raw package values are masked, bucketed, normalized, or policy-transformed before confidential processing."
+      >
+        <div className="contribution-package-summary" ref={packagePreviewRef}>
+          <div className="metric-block">
+            <span className="eyebrow">Package Status</span>
+            <strong>{data.contributionPackage?.status ?? data.participationStatus}</strong>
+          </div>
+          <div className="metric-block">
+            <span className="eyebrow">Selected Contribution Type</span>
+            <strong>{selectedType}</strong>
+          </div>
+          <div className="metric-block">
+            <span className="eyebrow">Package Boundary</span>
+            <strong>{data.contributionPackage?.rawDataRetention ?? "Raw values are not exposed outside confidential processing."}</strong>
+          </div>
+        </div>
+
+        <div className="package-preview-grid" aria-label="Prepared contribution package preview">
+          {(previewFields.length ? previewFields : data.requestedFields.map((field) => ({
+            field,
+            status: "Ready",
+            previewValue: "Prepared policy field",
+            transformation: "Masked / bucketed / normalized",
+            eligibleForScoring: true
+          }))).map((field) => (
+            <article key={field.field} className="package-preview-card">
+              <div>
+                <span className="eyebrow">{field.status}</span>
+                <h3>{field.field}</h3>
+              </div>
+              <strong>{field.previewValue}</strong>
+              <p>{field.transformation}</p>
+              <span className={field.eligibleForScoring ? "tag tag--accent" : "tag"}>
+                {field.eligibleForScoring ? "Eligible for scoring" : "Review required"}
+              </span>
+            </article>
           ))}
         </div>
       </SectionCard>
 
       <SectionCard
         title="Contribution Types"
-        subtitle="Choose the assurance class for this submission. Higher-assurance contribution types receive stronger benchmark weighting and reliability treatment."
+        subtitle="Choose the policy assurance class sent with this demo package. External attestation classes are policy-recognized here; no live oracle or custodian connection is implied."
       >
         <div className="contribution-policy-flow">
           <div className="assurance-selector" role="group" aria-label="Contribution assurance class">
@@ -154,6 +243,7 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
                 }
                 onClick={() => setSelectedType(item)}
                 aria-pressed={item === selectedType}
+                disabled={terminalSubmission || result.submitStatus === "submitting"}
               >
                 <span>{item}</span>
               </button>
@@ -191,7 +281,11 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
                 </div>
               </div>
               <div className="eligibility-list">
-                {eligibilityRules.map((rule) => (
+                {(eligibilityRules.length ? eligibilityRules : [
+                  { label: "Selected fields match active campaign requirements", status: "Matched" },
+                  { label: "Contribution package uses selected benchmark fields only", status: "Passed" },
+                  { label: "Raw data retention outside processing boundary", status: "None" }
+                ]).map((rule) => (
                   <div key={rule.label} className="eligibility-row">
                     <span className="eligibility-row__indicator" aria-hidden="true">
                       <svg viewBox="0 0 24 24" role="presentation">
@@ -215,16 +309,11 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
             <aside className="policy-subsection policy-subsection--summary" aria-labelledby="policy-summary-title">
               <span className="eyebrow">Contribution Policy Summary</span>
               <h3 id="policy-summary-title">Benchmark inclusion logic</h3>
-              <p>
-                Benchmark inclusion depends on both submission type and policy compliance.
-                System-signed and custodian-attested inputs receive higher benchmark weight than
-                self-reported entries. Out-of-policy contributions may be accepted for review but
-                excluded from final reliability scoring.
-              </p>
+              <p>{data.policySummary}</p>
               <div className="policy-rule-list" aria-label="Policy scoring rules">
                 <span>Type affects weight</span>
                 <span>Policy gates scoring</span>
-                <span>Out-of-policy remains review-only</span>
+                <span>Out-of-policy remains review-only until resolved</span>
               </div>
             </aside>
           </div>
@@ -237,7 +326,11 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
               </div>
             </div>
             <div className="weight-comparison">
-              {submissionWeights.map((item) => (
+              {(submissionWeights.length ? submissionWeights : [
+                { type: "Self-reported", weight: "Standard", treatment: "Lower confidence contribution" },
+                { type: "System-signed", weight: "Elevated", treatment: "Strong benchmark inclusion after review" },
+                { type: "Oracle / custodian-attested", weight: "Highest", treatment: "Maximum policy weight when external attestation is available" }
+              ]).map((item) => (
                 <div
                   key={item.type}
                   className={
@@ -257,37 +350,88 @@ export function DeskContributeView({ data: initialData }: DeskContributeViewProp
           <div className="quality-note">
             <div>
               <span className="eyebrow">Why Contribution Quality Matters</span>
-              <p>
-                Compass does not treat all institutional submissions as equally trustworthy.
-                Contribution quality directly affects benchmark strength, attestation coverage, and
-                the confidence of institution-level intelligence outputs.
-              </p>
+              <p>{data.contributionPolicy?.qualityNote || "Contribution quality affects benchmark strength and confidence. The Institution Desk submits selected benchmark fields, not full raw institutional positions."}</p>
             </div>
           </div>
+
+          {result.submitMessage ? (
+            <div
+              className={
+                result.submitStatus === "error"
+                  ? "contribution-status-panel contribution-status-panel--error"
+                  : "contribution-status-panel contribution-status-panel--success"
+              }
+              role="status"
+            >
+              <span className="eyebrow">{result.submitStatus === "error" ? "Submission Error" : "Package Status"}</span>
+              <strong>{result.submitMessage}</strong>
+            </div>
+          ) : null}
 
           <div className="contribution-submit-row">
             <button
               type="button"
               className="record-button"
-              onClick={handleSubmit}
+              onClick={handlePrimaryAction}
               disabled={result.submitStatus === "submitting"}
             >
-              {result.submitStatus === "submitting" ? "Submitting..." : "Submit Contribution"}
+              {submitLabel}
             </button>
-            {result.submitMessage ? (
-              <span
-                className={
-                  result.submitStatus === "error"
-                    ? "role-state-panel role-state-panel--error"
-                    : "role-state-panel"
-                }
-              >
-                {result.submitMessage}
-              </span>
-            ) : null}
           </div>
         </div>
       </SectionCard>
+
+      {confirmOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="confirmation-modal panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="contribution-confirm-title"
+          >
+            <div className="confirmation-modal__header">
+              <span className="eyebrow">Confirm Contribution Package</span>
+              <h3 id="contribution-confirm-title">{confirmationActionLabel}</h3>
+              <p>
+                Confirm Alpha Bank's prepared benchmark contribution package before sending it for
+                confidential processing.
+              </p>
+            </div>
+
+            <div className="confirmation-summary">
+              <div>
+                <span>Campaign</span>
+                <strong>{data.title}</strong>
+              </div>
+              <div>
+                <span>Contribution Type</span>
+                <strong>{selectedType}</strong>
+              </div>
+              <div>
+                <span>Selected Benchmark Fields</span>
+                <strong>{fieldCount}</strong>
+              </div>
+              <div>
+                <span>Raw Data Exposure</span>
+                <strong>None</strong>
+              </div>
+              <div>
+                <span>Confidential Processing</span>
+                <strong>{data.contributionPackage?.confidentialProcessing ?? data.teeProcessingEnabled}</strong>
+              </div>
+            </div>
+
+            <div className="confirmation-modal__actions">
+              <button type="button" className="topbar-button topbar-button--secondary" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="topbar-button topbar-button--primary" onClick={handleConfirmSubmit}>
+                {confirmationActionLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

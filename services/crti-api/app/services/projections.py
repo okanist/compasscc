@@ -29,19 +29,41 @@ class ProjectionFactory:
         self.repo = repo
         self.audit_package = audit_package
 
-    def overview_projection(self, role, metrics: list[MetricDTO], summaries: list[str], actions: list[ActionDTO]) -> OverviewProjection:
-        return OverviewProjection(role=role, metrics=metrics, summaries=summaries, actions=actions)
+    def overview_projection(
+        self,
+        role,
+        metrics: list[MetricDTO],
+        summaries: list[str],
+        actions: list[ActionDTO],
+        overview_sections: dict | None = None,
+    ) -> OverviewProjection:
+        return OverviewProjection(
+            role=role,
+            metrics=metrics,
+            summaries=summaries,
+            actions=actions,
+            overview_sections=overview_sections or {},
+        )
 
-    def campaign_projection(self, campaign_id: int, actions: list[ActionDTO]) -> CampaignProjection:
+    def campaign_projection(
+        self,
+        campaign_id: int,
+        actions: list[ActionDTO],
+        institution_id: int | None = None,
+        contribution_package: dict | None = None,
+        contribution_policy: dict | None = None,
+    ) -> CampaignProjection:
         campaign = self.repo.get_campaign(campaign_id)
         submissions = self.repo.list_submissions(campaign_id=campaign_id)
+        if institution_id is not None:
+            submissions = [item for item in submissions if item.institution_id == institution_id]
         return CampaignProjection(
             campaign=campaign,
             metrics=[
                 MetricDTO(label="Campaign Status", value=campaign.status),
                 MetricDTO(label="Minimum Reputation", value=f"{campaign.min_reputation_threshold:.2f}"),
                 MetricDTO(label="Confidence Required", value=campaign.confidence_tier_required),
-                MetricDTO(label="TEE Processing", value="Enabled" if campaign.tee_processing_enabled else "Disabled"),
+                MetricDTO(label="Confidential Processing", value="Enabled" if campaign.tee_processing_enabled else "Disabled"),
             ],
             requested_fields=campaign.requested_fields_json,
             policy_summary=(
@@ -50,10 +72,40 @@ class ProjectionFactory:
             ),
             submissions=submissions,
             actions=actions,
+            contribution_package=contribution_package or {},
+            contribution_policy=contribution_policy or {},
         )
 
-    def processing_projection(self, run_id: int, actions: list[ActionDTO]) -> ProcessingProjection:
+    def processing_projection(
+        self,
+        run_id: int,
+        actions: list[ActionDTO],
+        processing_context: dict | None = None,
+    ) -> ProcessingProjection:
         run = self.repo.get_run(run_id)
+        if run.run_status == "not_started":
+            return ProcessingProjection(
+                run=run,
+                metrics=[
+                    MetricDTO(label="Run Status", value="Waiting for contribution"),
+                    MetricDTO(label="Runtime Mode", value=run.runtime_mode),
+                    MetricDTO(label="Input Count", value="0"),
+                    MetricDTO(label="Valid Inputs", value="0"),
+                    MetricDTO(label="Invalid Inputs", value="0"),
+                    MetricDTO(label="Retention Policy", value=run.retention_policy_status),
+                    MetricDTO(label="Attestation Ref", value="Pending"),
+                    MetricDTO(label="Release Readiness", value="draft"),
+                ],
+                lifecycle=[
+                    "waiting for institution contribution package",
+                    "confidential processing not started",
+                    "no raw contribution package received",
+                    "derived outputs not generated",
+                ],
+                evidence_refs=[],
+                actions=actions,
+                processing_context=processing_context or {},
+            )
         attestation = self.repo.get_attestation_for_run(run.id)
         return ProcessingProjection(
             run=run,
@@ -77,6 +129,7 @@ class ProjectionFactory:
             ],
             evidence_refs=[attestation.ref_code, "runtime-manifest", "retention-checkpoint"],
             actions=actions,
+            processing_context=processing_context or {},
         )
 
     def benchmark_projection(self, scenario: str | None, actions: list[ActionDTO]) -> BenchmarkProjection:

@@ -1,131 +1,95 @@
+import { useEffect, useState } from "react";
 import { SectionCard } from "../../../components/SectionCard";
 import { ViewState } from "../../../components/primitives/ViewState";
-import type { ProcessingData } from "../../../data/types";
+import type { NavKey, ProcessingData } from "../../../data/types";
 import { useDeskProcessing } from "../hooks";
 
 interface DeskProcessingViewProps {
   data: ProcessingData;
+  onNavigate: (key: NavKey) => void;
 }
 
-const boundarySummary = [
-  { label: "Input Scope", value: "Selected contribution fields only" },
-  { label: "Processing Mode", value: "TEE-enabled deterministic runtime" },
-  { label: "Output Scope", value: "Derived benchmark and scoped outputs" }
-];
-
-const processingFlow = [
-  {
-    title: "Raw contribution accepted",
-    explanation: "Selected fields accepted under active campaign policy",
-    status: "Accepted",
-    tone: "warm",
-    evidence: "Campaign policy matched"
-  },
-  {
-    title: "Secure execution started",
-    explanation: "Contribution package entered TEE-enabled runtime",
-    status: "Active",
-    tone: "cool",
-    evidence: "Confidential boundary enabled"
-  },
-  {
-    title: "Persistent storage disabled",
-    explanation: "Raw payload retention blocked outside runtime",
-    status: "Enforced",
-    tone: "neutral",
-    evidence: "No external persistence"
-  },
-  {
-    title: "Deterministic benchmark engine executed",
-    explanation: "Liquidity, reliability, and dispersion logic computed",
-    status: "Completed",
-    tone: "success",
-    evidence: "Deterministic run successful"
-  },
-  {
-    title: "Local explanation layer applied",
-    explanation: "Summary restates computed results only",
-    status: "Restricted",
-    tone: "neutral",
-    evidence: "No raw data access"
-  },
-  {
-    title: "Derived output package generated",
-    explanation: "Benchmark package and institution-scoped comparison produced",
-    status: "Generated",
-    tone: "warm",
-    evidence: "Output scope verified"
-  },
-  {
-    title: "Attestation reference created",
-    explanation: "Audit-ready execution reference linked to this run",
-    status: "Issued",
-    tone: "warm",
-    evidence: "TEE-ATTEST-Q2-REPONET-014"
-  },
-  {
-    title: "Raw data retention policy enforced",
-    explanation: "Raw data not retained outside secure execution path",
-    status: "None",
-    tone: "neutral",
-    evidence: "Retention disabled"
-  }
-];
-
-const runtimeGuarantees = [
-  {
-    title: "Confidential Boundary",
-    body: "TEE-enabled execution boundary active"
-  },
-  {
-    title: "Deterministic Logic",
-    body: "Outputs generated from fixed computation paths"
-  },
-  {
-    title: "Restricted Explanation Layer",
-    body: "Summaries restate outputs without raw payload access"
-  },
-  {
-    title: "Retention Policy",
-    body: "No raw payload persistence outside runtime"
-  }
-];
-
-const releasedOutputs = [
-  "Benchmark reliability package",
-  "Cohort-level benchmark metrics",
-  "Institution-scoped comparison output",
-  "Attestation reference",
-  "No raw institutional contribution data"
-];
-
-export function DeskProcessingView({ data: initialData }: DeskProcessingViewProps) {
+export function DeskProcessingView({ data: initialData, onNavigate }: DeskProcessingViewProps) {
   const result = useDeskProcessing(initialData);
+  const [attestationOpen, setAttestationOpen] = useState(false);
+
+  const data = result.data ?? initialData;
+  const context = data.context;
+  const contributionReceived = Boolean(context?.contributionReceived);
+  const benchmarkReady = Boolean(context?.benchmarkReady);
+  const primaryLabel = contributionReceived ? "View Attestation Record" : "Submit Contribution";
+  const handlePrimaryAction = () => {
+    if (contributionReceived) {
+      setAttestationOpen(true);
+      return;
+    }
+
+    onNavigate("campaign");
+  };
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("compass:processing-action-label", {
+        detail: { label: primaryLabel }
+      })
+    );
+  }, [primaryLabel]);
+
+  useEffect(() => {
+    const handleTopBarAction = () => handlePrimaryAction();
+
+    window.addEventListener("compass:processing-primary-action", handleTopBarAction);
+    return () => window.removeEventListener("compass:processing-primary-action", handleTopBarAction);
+  }, [contributionReceived]);
 
   if (result.status !== "ready" || !result.data) {
     return <ViewState result={result} title="Institution Desk Processing">{() => null}</ViewState>;
   }
 
-  const data = result.data;
-  const realProcessingFlow =
-    data.steps.length > 0
-      ? data.steps.map((step, index) => ({
-          title: step.label,
-          explanation: step.value,
-          status:
-            index === 0
-              ? data.status ?? "active"
-              : index >= data.steps.length - 2
-                ? "Issued"
-                : "Completed",
-          tone: index === 0 ? "cool" : index >= data.steps.length - 2 ? "warm" : "success",
-          evidence: data.evidenceRefs?.[index] ?? step.value
-        }))
-      : processingFlow;
+  const boundarySummary = [
+    { label: "Processing Status", value: contributionReceived ? "Package received" : data.metrics?.find((item) => item.label === "Run Status")?.value ?? "Waiting for contribution" },
+    { label: "Contribution Package Received", value: contributionReceived ? "Received" : "Not received" },
+    { label: "Simulated TEE Boundary", value: context?.simulatedTeeStatus ?? "Standby / waiting" },
+    { label: "Policy Checks", value: context?.policyChecks ?? "Not started" },
+    { label: "Benchmark Readiness", value: context?.benchmarkReadiness ?? "Not ready" },
+    { label: "Raw Data Exposure", value: context?.rawDataExposure ?? "None" }
+  ];
+  const runtimeGuarantees = [
+    {
+      title: "Simulated TEE Boundary",
+      body: context?.safeSummary ?? "Selected contribution fields are processed inside a simulated TEE confidential boundary before derived benchmark outputs are released."
+    },
+    {
+      title: "TEE Simulation Status",
+      body: context?.simulatedTeeStatus ?? "Standby - waiting for contribution"
+    },
+    {
+      title: "Disclosure Boundary",
+      body: context?.disclosureSummary ?? "Raw package values are not exposed in Institution Desk, Operator, Auditor, or peer benchmark views."
+    },
+    {
+      title: "Retention Policy",
+      body: context?.retention ?? "None outside confidential boundary"
+    }
+  ];
+  const releasedOutputs = [
+    context?.releasedScope ?? "Only derived benchmark metrics, institution-scoped outputs, and attestation references are released.",
+    "Benchmark reliability package when ready",
+    "Cohort-level benchmark metrics when ready",
+    "Institution-scoped comparison output when ready",
+    "No raw institutional contribution data"
+  ];
+  const realProcessingFlow = data.steps.map((step) => ({
+    title: step.label,
+    explanation: step.value,
+    status: step.status ?? "Waiting",
+    tone: step.tone ?? "neutral",
+    evidence: step.evidence ?? step.value
+  }));
 
   return (
     <div className="page-grid">
-      <SectionCard title="Benchmark Boundary Summary" subtitle="Raw data goes in. Only intelligence comes out.">
+      <SectionCard title="Benchmark Boundary Summary" subtitle={data.headline}>
         <div className="processing-boundary-summary">
           <p>{data.body}</p>
           <div className="boundary-card-grid">
@@ -139,9 +103,29 @@ export function DeskProcessingView({ data: initialData }: DeskProcessingViewProp
         </div>
       </SectionCard>
 
+      <SectionCard title="Desk Actions" subtitle="Institution Desk can view safe status, review the contribution package, and continue only when benchmark intelligence is ready.">
+        <div className="processing-action-row">
+          <button type="button" className="record-button" onClick={() => onNavigate("campaign")}>
+            {contributionReceived ? "View Contribution Package" : "Submit Contribution"}
+          </button>
+          <button type="button" className="record-button" onClick={() => setAttestationOpen(true)} disabled={!contributionReceived}>
+            View Attestation Record
+          </button>
+          <button type="button" className="record-button" onClick={() => onNavigate("benchmark")} disabled={!benchmarkReady}>
+            Continue to Benchmark
+          </button>
+          <button type="button" className="record-button" onClick={() => void result.refresh()} disabled={result.refreshStatus === "loading"}>
+            {result.refreshStatus === "loading" ? "Refreshing..." : "Refresh Status"}
+          </button>
+        </div>
+        {result.refreshStatus === "error" && result.refreshMessage ? (
+          <div className="role-state-panel role-state-panel--error">{result.refreshMessage}</div>
+        ) : null}
+      </SectionCard>
+
       <SectionCard
         title="Confidential Processing Flow"
-        subtitle="Each benchmark package is processed inside a controlled execution boundary before any derived output is released."
+        subtitle="Selected contribution fields are processed inside a simulated TEE confidential boundary before derived benchmark outputs are released."
       >
         <div className="processing-flow-list">
           {realProcessingFlow.map((step, index) => (
@@ -190,6 +174,62 @@ export function DeskProcessingView({ data: initialData }: DeskProcessingViewProp
           ))}
         </div>
       </SectionCard>
+
+      {attestationOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="confirmation-modal panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="attestation-record-title"
+          >
+            <div className="confirmation-modal__header">
+              <span className="eyebrow">Safe Attestation Summary</span>
+              <h3 id="attestation-record-title">View Attestation Record</h3>
+              <p>No raw contribution package values are exposed in this Institution Desk summary.</p>
+            </div>
+            <div className="confirmation-summary">
+              <div>
+                <span>Campaign</span>
+                <strong>{context?.campaignTitle ?? "Q2 Repo Liquidity and Treasury Readiness Campaign"}</strong>
+              </div>
+              <div>
+                <span>Contribution Type</span>
+                <strong>{context?.contributionType ?? "System-signed"}</strong>
+              </div>
+              <div>
+                <span>Contribution Status</span>
+                <strong>{context?.contributionStatus ?? "Not received"}</strong>
+              </div>
+              <div>
+                <span>Simulated TEE Status</span>
+                <strong>{context?.simulatedTeeStatus ?? "Standby"}</strong>
+              </div>
+              <div>
+                <span>Policy Checks</span>
+                <strong>{context?.policyChecks ?? "Not started"}</strong>
+              </div>
+              <div>
+                <span>Raw Data Exposure</span>
+                <strong>{context?.rawDataExposure ?? "None"}</strong>
+              </div>
+              <div>
+                <span>Retention</span>
+                <strong>{context?.retention ?? "None outside confidential boundary"}</strong>
+              </div>
+              <div>
+                <span>Reference</span>
+                <strong>{context?.attestationRef ?? "ATT-SIM-0001"}</strong>
+              </div>
+            </div>
+            <div className="confirmation-modal__actions">
+              <button type="button" className="topbar-button topbar-button--primary" onClick={() => setAttestationOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

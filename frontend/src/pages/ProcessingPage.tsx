@@ -1,4 +1,5 @@
 import type { ProcessingData } from "../data/types";
+import type { NavKey } from "../data/types";
 import type { AppRole } from "../types/roles";
 import { AuditorProcessingView } from "../features/processing/views/AuditorProcessingView";
 import { DeskProcessingView } from "../features/processing/views/DeskProcessingView";
@@ -7,9 +8,10 @@ import { OperatorProcessingView } from "../features/processing/views/OperatorPro
 interface ProcessingPageProps {
   data: ProcessingData;
   role: AppRole;
+  onNavigate: (key: NavKey) => void;
 }
 
-export function ProcessingPage({ data, role }: ProcessingPageProps) {
+export function ProcessingPage({ data, role, onNavigate }: ProcessingPageProps) {
   if (role === "operator") {
     return <OperatorProcessingView />;
   }
@@ -18,5 +20,5 @@ export function ProcessingPage({ data, role }: ProcessingPageProps) {
     return <AuditorProcessingView />;
   }
 
-  return <DeskProcessingView data={data} />;
+  return <DeskProcessingView data={data} onNavigate={onNavigate} />;
 }

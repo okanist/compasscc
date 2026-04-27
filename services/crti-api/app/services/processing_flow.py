@@ -54,7 +54,7 @@ class ProcessingFlowService:
         self.ledger.submit_contribution(submission.id)
         return CommandResult(
             status="accepted",
-            message="Contribution submitted for review." if created else "Existing open contribution updated for review.",
+            message="Contribution package submitted for confidential processing." if created else "Existing contribution package updated for review.",
             resource_id=submission.id,
             next_state=submission.review_status,
             related_resource_id=run.id,

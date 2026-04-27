@@ -58,7 +58,12 @@ export function useDeskContribute(data: CampaignData): DeskContributeResult {
       setSubmitMessage(undefined);
 
       try {
-        const response = await submitDeskContribution(result.data.id ?? 1, submissionType, result.data.requestedFields);
+        const response = await submitDeskContribution(
+          result.data.id ?? 1,
+          submissionType,
+          result.data.requestedFields,
+          result.data.contributionPackage?.previewFields ?? []
+        );
         const refreshed = await getDeskCampaign(result.data.id ?? 1);
         setResult({ status: "ready", data: refreshed });
         setSubmitStatus("success");

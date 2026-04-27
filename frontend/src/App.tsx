@@ -156,22 +156,40 @@ export default function App() {
   const { role, setRole } = useRole();
   const [data, setData] = useState<ApiPayload>(fallbackData);
   const [theme, setTheme] = useState<ThemeMode>("night");
+  const [contributionActionLabel, setContributionActionLabel] = useState("Submit Contribution");
+  const [processingActionLabel, setProcessingActionLabel] = useState("Submit Contribution");
   const activeTopBar = topBarContent[role][activeNav];
   const toggleTheme = () => setTheme((currentTheme) => (currentTheme === "night" ? "day" : "night"));
-
-  const handlePrimaryAction = () => {
-    console.info(`[Compass] ${activeTopBar.primaryActionLabel}`);
-  };
-
-  const handleSecondaryAction = () => {
-    if (activeTopBar.secondaryActionLabel) {
-      console.info(`[Compass] ${activeTopBar.secondaryActionLabel}`);
-    }
-  };
 
   const handleNavigate = (key: NavKey) => {
     setActiveNav(key);
     window.history.pushState(null, "", navRoutes[key]);
+  };
+
+  const handleTopBarAction = (label: string) => {
+    if (role === "institution_desk" && activeNav === "overview") {
+      if (label === "Submit Contribution") {
+        handleNavigate("campaign");
+        return;
+      }
+
+      if (label === "Compare to My Position") {
+        handleNavigate("position");
+        return;
+      }
+    }
+
+    if (role === "institution_desk" && activeNav === "campaign") {
+      window.dispatchEvent(new CustomEvent("compass:submit-contribution"));
+      return;
+    }
+
+    if (role === "institution_desk" && activeNav === "processing") {
+      window.dispatchEvent(new CustomEvent("compass:processing-primary-action"));
+      return;
+    }
+
+    console.info(`[Compass] ${label}`);
   };
 
   useEffect(() => {
@@ -198,12 +216,38 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  let page = <OverviewPage data={data.overview} role={role} />;
+  useEffect(() => {
+    const handleContributionLabel = (event: Event) => {
+      const label = (event as CustomEvent<{ label?: string }>).detail?.label;
+
+      if (label) {
+        setContributionActionLabel(label);
+      }
+    };
+
+    window.addEventListener("compass:contribution-action-label", handleContributionLabel);
+    return () => window.removeEventListener("compass:contribution-action-label", handleContributionLabel);
+  }, []);
+
+  useEffect(() => {
+    const handleProcessingLabel = (event: Event) => {
+      const label = (event as CustomEvent<{ label?: string }>).detail?.label;
+
+      if (label) {
+        setProcessingActionLabel(label);
+      }
+    };
+
+    window.addEventListener("compass:processing-action-label", handleProcessingLabel);
+    return () => window.removeEventListener("compass:processing-action-label", handleProcessingLabel);
+  }, []);
+
+  let page = <OverviewPage data={data.overview} role={role} onNavigate={handleNavigate} />;
 
   if (activeNav === "campaign") {
     page = <ContributionPage data={data.campaigns[0]} role={role} />;
   } else if (activeNav === "processing") {
-    page = <ProcessingPage data={data.processing} role={role} />;
+    page = <ProcessingPage data={data.processing} role={role} onNavigate={handleNavigate} />;
   } else if (activeNav === "benchmark") {
     page = <BenchmarkPage data={data.benchmark} role={role} />;
   } else if (activeNav === "position") {
@@ -220,6 +264,12 @@ export default function App() {
       onToggleTheme={toggleTheme}
       topBar={{
         ...activeTopBar,
+        primaryActionLabel:
+          role === "institution_desk" && activeNav === "campaign"
+            ? contributionActionLabel
+            : role === "institution_desk" && activeNav === "processing"
+              ? processingActionLabel
+            : activeTopBar.primaryActionLabel,
         showRoleSwitcher: true,
         showModeToggle: true,
         confidentialStatusLabel: "Confidential Processing",
@@ -231,8 +281,10 @@ export default function App() {
               : activeNav === "overview"
                 ? "Private benchmark boundary active"
                 : "Raw data retention: none",
-        onPrimaryAction: handlePrimaryAction,
-        onSecondaryAction: activeTopBar.secondaryActionLabel ? handleSecondaryAction : undefined
+        onPrimaryAction: () => handleTopBarAction(activeTopBar.primaryActionLabel),
+        onSecondaryAction: activeTopBar.secondaryActionLabel
+          ? () => handleTopBarAction(activeTopBar.secondaryActionLabel as string)
+          : undefined
       }}
     >
       {page}

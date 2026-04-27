@@ -101,26 +101,6 @@ class CompassRepository:
             )
         }
         self.submissions = {
-            1: ContributionSubmissionDTO(
-                id=1,
-                campaign_id=1,
-                institution_id=1,
-                submission_type="System-signed",
-                confidence_tier="High",
-                payload_json={
-                    "liquidity_score": 69.1,
-                    "repo_rate": 4.92,
-                    "haircut": 3.1,
-                    "notional": 142_000_000,
-                    "collateral_structure": "UST-heavy with concentrated tenor",
-                    "maturity_bucket": "8-14 days",
-                },
-                policy_status="matched",
-                review_status="submitted",
-                attestation_status="system_signed",
-                submitted_at=now - timedelta(days=1),
-                updated_at=now - timedelta(hours=3),
-            ),
             2: ContributionSubmissionDTO(
                 id=2,
                 campaign_id=1,
@@ -166,16 +146,16 @@ class CompassRepository:
             1: ProcessingRunDTO(
                 id=1,
                 campaign_id=1,
-                run_status="completed",
-                started_at=now - timedelta(hours=2),
-                finished_at=now - timedelta(hours=1, minutes=40),
-                attestation_ref="TEE-ATTEST-Q2-REPONET-014",
+                run_status="not_started",
+                started_at=None,
+                finished_at=None,
+                attestation_ref=None,
                 retention_policy_status="raw_retention_disabled",
                 runtime_mode="tee_deterministic",
-                input_count=3,
-                valid_submission_count=3,
+                input_count=0,
+                valid_submission_count=0,
                 invalid_submission_count=0,
-                notes_json={"retry_markers": 1, "release_readiness": RELEASE_APPROVED, "release_status": RELEASE_APPROVED},
+                notes_json={"retry_markers": 0, "release_readiness": RELEASE_DRAFT, "release_status": RELEASE_DRAFT},
             )
         }
         self.snapshots = {
@@ -444,7 +424,7 @@ class CompassRepository:
                     "submission_type": payload["submission_type"],
                     "confidence_tier": payload["confidence_tier"],
                     "payload_json": normalized_payload,
-                    "policy_status": SUBMISSION_SUBMITTED,
+                    "policy_status": "matched",
                     "review_status": SUBMISSION_SUBMITTED,
                     "attestation_status": payload.get("attestation_status", "pending"),
                     "updated_at": now,
@@ -461,7 +441,7 @@ class CompassRepository:
             submission_type=payload["submission_type"],
             confidence_tier=payload["confidence_tier"],
             payload_json=normalized_payload,
-            policy_status=SUBMISSION_SUBMITTED,
+            policy_status="matched",
             review_status=SUBMISSION_SUBMITTED,
             attestation_status=payload.get("attestation_status", "pending"),
             submitted_at=now,

@@ -26,16 +26,29 @@ export interface AuditorProcessingData {
   actions: RoleAction[];
 }
 
-export function useDeskProcessing(data: ProcessingData): ViewResult<ProcessingData> {
+export interface DeskProcessingResult extends ViewResult<ProcessingData> {
+  refresh: () => Promise<void>;
+  refreshStatus: "idle" | "loading" | "error";
+  refreshMessage?: string;
+}
+
+export function useDeskProcessing(data: ProcessingData): DeskProcessingResult {
   const [result, setResult] = useState<ViewResult<ProcessingData>>({ status: "loading" });
+  const [refreshStatus, setRefreshStatus] = useState<DeskProcessingResult["refreshStatus"]>("idle");
+  const [refreshMessage, setRefreshMessage] = useState<string>();
+
+  const load = async () => {
+    const payload = await getDeskProcessing(data.runId ?? 1);
+    setResult(payload.steps.length ? { status: "ready", data: payload } : { status: "empty" });
+  };
 
   useEffect(() => {
     let cancelled = false;
 
-    getDeskProcessing(data.runId ?? 1)
-      .then((payload) => {
+    load()
+      .then(() => {
         if (!cancelled) {
-          setResult(payload.steps.length ? { status: "ready", data: payload } : { status: "empty" });
+          setRefreshStatus("idle");
         }
       })
       .catch((error: Error) => {
@@ -49,7 +62,19 @@ export function useDeskProcessing(data: ProcessingData): ViewResult<ProcessingDa
     };
   }, [data]);
 
-  return result;
+  const refresh = async () => {
+    setRefreshStatus("loading");
+    setRefreshMessage(undefined);
+    try {
+      await load();
+      setRefreshStatus("idle");
+    } catch (error) {
+      setRefreshStatus("error");
+      setRefreshMessage(error instanceof Error ? error.message : "Processing refresh failed.");
+    }
+  };
+
+  return { ...result, refresh, refreshStatus, refreshMessage };
 }
 
 export function useOperatorProcessing(): OperatorProcessingResult {

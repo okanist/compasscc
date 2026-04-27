@@ -6,12 +6,42 @@ export type NavKey =
   | "position";
 
 export interface OverviewData {
-  kpis: { label: string; value: string; tone?: "neutral" | "positive" | "warning" }[];
+  kpis: { label: string; value: string; detail?: string; tone?: "neutral" | "positive" | "warning" }[];
   informationBand: {
     title: string;
     body: string;
   };
   processStrip: string[];
+  deskOverview?: {
+    benchmark?: {
+      title?: string;
+      averageLiquidity?: string;
+      delta?: string;
+      topQuartile?: string;
+      median?: string;
+      bottomQuartile?: string;
+      interpretation?: string;
+    };
+    networkIntelligence?: {
+      subtitle?: string;
+      eyebrow?: string;
+      headline?: string;
+      body?: string;
+      route?: NavKey;
+    };
+    contributionCards?: {
+      title: string;
+      status: string;
+      action: string;
+      tone?: "success" | "action" | "ghost";
+    }[];
+    recentIntelligence?: {
+      category?: string;
+      title: string;
+      meta?: string;
+      route?: NavKey;
+    }[];
+  };
 }
 
 export interface CampaignData {
@@ -28,16 +58,64 @@ export interface CampaignData {
   confidenceTier: string;
   teeProcessingEnabled: string;
   latestSubmissionStatus?: string;
+  selectedContributionType?: string;
+  attestationStatus?: string;
+  rawDataRetention?: string;
   processingRunId?: number;
+  contributionPackage?: {
+    status: string;
+    selectedType: string;
+    confidenceTier: string;
+    attestationStatus: string;
+    rawDataRetention: string;
+    confidentialProcessing: string;
+    previewFields: {
+      field: string;
+      status: string;
+      previewValue: string;
+      transformation: string;
+      eligibleForScoring: boolean;
+    }[];
+  };
+  contributionPolicy?: {
+    contributionTypes: {
+      type: string;
+      benchmarkWeight: string;
+      trustClass: string;
+      policyStatus: string;
+      explanation: string;
+      attestationStatus: string;
+    }[];
+    eligibilityRules: { label: string; status: string }[];
+    submissionWeights: { type: string; weight: string; treatment: string }[];
+    qualityNote: string;
+  };
 }
 
 export interface ProcessingData {
   runId?: number;
   status?: string;
-  steps: { label: string; value: string }[];
+  metrics?: { label: string; value: string; detail?: string }[];
+  steps: { label: string; value: string; status?: string; tone?: string; evidence?: string }[];
   headline: string;
   body: string;
   evidenceRefs?: string[];
+  context?: {
+    campaignTitle?: string;
+    contributionType?: string;
+    contributionStatus?: string;
+    contributionReceived?: boolean;
+    simulatedTeeStatus?: string;
+    policyChecks?: string;
+    benchmarkReadiness?: string;
+    benchmarkReady?: boolean;
+    rawDataExposure?: string;
+    retention?: string;
+    attestationRef?: string;
+    safeSummary?: string;
+    disclosureSummary?: string;
+    releasedScope?: string;
+  };
 }
 
 export interface BenchmarkData {

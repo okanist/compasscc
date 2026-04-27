@@ -141,6 +141,7 @@ class OverviewProjection(BaseModel):
     metrics: list[MetricDTO]
     summaries: list[str]
     actions: list[ActionDTO]
+    overview_sections: dict[str, Any] = Field(default_factory=dict)
 
 
 class CampaignProjection(BaseModel):
@@ -150,6 +151,8 @@ class CampaignProjection(BaseModel):
     policy_summary: str
     actions: list[ActionDTO]
     submissions: list[ContributionSubmissionDTO] = Field(default_factory=list)
+    contribution_package: dict[str, Any] = Field(default_factory=dict)
+    contribution_policy: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProcessingProjection(BaseModel):
@@ -158,6 +161,7 @@ class ProcessingProjection(BaseModel):
     lifecycle: list[str]
     evidence_refs: list[str]
     actions: list[ActionDTO]
+    processing_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class BenchmarkProjection(BaseModel):
