@@ -165,16 +165,17 @@ class ProcessingProjection(BaseModel):
 
 
 class BenchmarkProjection(BaseModel):
-    snapshot: BenchmarkSnapshotDTO
+    snapshot: BenchmarkSnapshotDTO | None
     primary_metrics: list[MetricDTO]
     secondary_metrics: list[MetricDTO]
     alerts: list[str]
-    distribution: dict[str, Any]
+    distribution: dict[str, Any] | None
     actions: list[ActionDTO]
+    benchmark_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class InstitutionOutputProjection(BaseModel):
-    output: InstitutionOutputDTO
+    output: InstitutionOutputDTO | None
     metrics: list[MetricDTO]
     interpretation: str
     explainable_summary: str
@@ -182,6 +183,7 @@ class InstitutionOutputProjection(BaseModel):
     audit_handoff: list[str]
     audit_record: AuditRecordDTO | None = None
     actions: list[ActionDTO]
+    output_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class AuditProjection(BaseModel):
@@ -190,6 +192,8 @@ class AuditProjection(BaseModel):
     release_scope: dict[str, Any]
     evidence_refs: list[str]
     actions: list[ActionDTO]
+    audit_context: dict[str, Any] = Field(default_factory=dict)
+    audit_trail: list[str] = Field(default_factory=list)
 
 
 class ContributionSubmitRequest(BaseModel):

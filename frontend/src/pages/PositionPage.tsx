@@ -1,22 +1,24 @@
 import type { PositionData } from "../data/types";
+import type { NavKey } from "../data/types";
 import type { AppRole } from "../types/roles";
-import { AuditorOutputAuditView } from "../features/my-position/views/AuditorOutputAuditView";
+import { AuditorAuditRecordView } from "../features/my-position/views/AuditorAuditRecordView";
 import { DeskMyPositionView } from "../features/my-position/views/DeskMyPositionView";
 import { OperatorInstitutionReviewView } from "../features/my-position/views/OperatorInstitutionReviewView";
 
 interface PositionPageProps {
   data: PositionData;
   role: AppRole;
+  onNavigate: (key: NavKey) => void;
 }
 
-export function PositionPage({ data, role }: PositionPageProps) {
+export function PositionPage({ data, role, onNavigate }: PositionPageProps) {
   if (role === "operator") {
-    return <OperatorInstitutionReviewView />;
+    return <OperatorInstitutionReviewView onNavigate={onNavigate} />;
   }
 
   if (role === "auditor") {
-    return <AuditorOutputAuditView />;
+    return <AuditorAuditRecordView onNavigate={onNavigate} />;
   }
 
-  return <DeskMyPositionView data={data} />;
+  return <DeskMyPositionView data={data} onNavigate={onNavigate} />;
 }

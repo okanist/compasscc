@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { SectionCard } from "../../../components/SectionCard";
 import { ViewState } from "../../../components/primitives/ViewState";
-import type { BenchmarkData } from "../../../data/types";
+import type { BenchmarkData, NavKey } from "../../../data/types";
 import { useDeskBenchmark } from "../hooks";
 
 interface DeskBenchmarkViewProps {
   data: BenchmarkData;
+  onNavigate: (key: NavKey) => void;
 }
 
 const benchmarkHighlights = [
@@ -29,36 +30,64 @@ const benchmarkHighlights = [
   }
 ];
 
-const confidenceNotes = [
-  "Signals reflect cohort-level benchmark behavior, not institution-specific conclusions.",
-  "Benchmark reliability depends on contribution depth, attestation coverage, and confidence tier.",
-  "All outputs shown here are derived from anonymized benchmark computation."
-];
-
-const contextStrip = [
-  { label: "Active Cohort", value: "24 contributors" },
-  { label: "Attested Coverage", value: "68%" },
-  { label: "Last Refresh", value: "4 min ago" }
-];
-
 const alertTone: Record<string, string> = {
   LIQUIDITY_OK: "positive",
   ELEVATED_DISPERSION: "amber",
   HAIRCUT_STRESS_SIGNAL: "stress"
 };
 
-export function DeskBenchmarkView({ data: initialData }: DeskBenchmarkViewProps) {
-  const result = useDeskBenchmark(initialData);
+export function DeskBenchmarkView({ data: initialData, onNavigate }: DeskBenchmarkViewProps) {
+  const [scenario, setScenario] = useState(initialData.selectedScenario);
+  const result = useDeskBenchmark(initialData, scenario);
   const data = result.data ?? initialData;
-  const [scenario, setScenario] = useState(data.selectedScenario);
+  const benchmarkReady = Boolean(data.context?.benchmarkReady);
 
   const metricMap = useMemo(
     () => new Map(data.primaryMetrics.map((metric) => [metric.label, metric.value])),
     [data.primaryMetrics]
   );
+  const contextStrip = [
+    { label: "Active Cohort", value: data.context?.activeCohort ?? `${metricMap.get("Contributor Count") ?? "N/A"} contributors` },
+    { label: "Attested Coverage", value: data.context?.attestedCoverage ?? "N/A" },
+    { label: "Last Refresh", value: data.context?.lastRefresh ?? "Pending" }
+  ];
+  const confidenceNotes = data.context?.confidenceNotes?.length
+    ? data.context.confidenceNotes
+    : [
+        "Signals reflect cohort-level benchmark behavior, not institution-specific raw contribution values.",
+        "Benchmark reliability depends on contribution depth, attested coverage, and confidence tier.",
+        "All outputs shown here are derived from anonymized benchmark computation."
+      ];
 
   if (result.status !== "ready" || !result.data) {
     return <ViewState result={result} title="Institution Desk Benchmark">{() => null}</ViewState>;
+  }
+
+  if (!benchmarkReady) {
+    return (
+      <div className="page-grid benchmark-page">
+        <SectionCard
+          title="Benchmark Intelligence Is Not Ready Yet"
+          subtitle="Cohort-level benchmark intelligence becomes available after Alpha Bank submits its prepared contribution package and simulated confidential processing completes."
+        >
+          <div className="role-state-panel">
+            {data.context?.notReadyMessage ??
+              "Benchmark intelligence becomes available after the contribution package is submitted and processed."}
+          </div>
+          <div className="processing-action-row">
+            <button type="button" className="record-button" onClick={() => onNavigate("campaign")}>
+              View Contribution Package
+            </button>
+            <button type="button" className="record-button" onClick={() => onNavigate("processing")}>
+              View Processing Status
+            </button>
+            <button type="button" className="record-button" onClick={() => void result.refresh()}>
+              Refresh Status
+            </button>
+          </div>
+        </SectionCard>
+      </div>
+    );
   }
 
   return (
@@ -70,17 +99,21 @@ export function DeskBenchmarkView({ data: initialData }: DeskBenchmarkViewProps)
         <div className="benchmark-scenario-panel">
           <div className="selector-row benchmark-selector-row">
             <label htmlFor="scenario-select">Collateral / Settlement Scenario</label>
-            <select
-              id="scenario-select"
-              value={scenario}
-              onChange={(event) => setScenario(event.target.value)}
-            >
-              {data.scenarioOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            {data.scenarioOptions.length > 1 ? (
+              <select
+                id="scenario-select"
+                value={scenario}
+                onChange={(event) => setScenario(event.target.value)}
+              >
+                {data.scenarioOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="scenario-static-value" id="scenario-select">{data.selectedScenario}</div>
+            )}
           </div>
 
           <div className="benchmark-context-strip" aria-label="Selected scenario context">
@@ -97,13 +130,13 @@ export function DeskBenchmarkView({ data: initialData }: DeskBenchmarkViewProps)
       <SectionCard title="Network Signal Summary">
         <div className="network-signal-card">
           <p className="network-signal-card__lead">
-            The active benchmark cohort shows solid liquidity conditions and high benchmark reliability,
-            though dispersion remains elevated across mixed repo and treasury collateral profiles.
+            {data.context?.networkSignalSummary ??
+              "Derived cohort intelligence is available for the selected scenario without exposing raw institution or peer positions."}
           </p>
           <div className="network-signal-lines">
-            <span>Liquidity remains above cohort median.</span>
-            <span>Benchmark confidence is supported by attested coverage and cohort depth.</span>
-            <span>Dispersion suggests uneven funding conditions across contributors.</span>
+            <span>Liquidity signal: {metricMap.get("Average Liquidity") ?? "N/A"}</span>
+            <span>Reliability: {metricMap.get("Benchmark Reliability") ?? "N/A"}</span>
+            <span>Dispersion: {metricMap.get("Liquidity Dispersion") ?? "N/A"}</span>
           </div>
         </div>
       </SectionCard>
@@ -133,12 +166,26 @@ export function DeskBenchmarkView({ data: initialData }: DeskBenchmarkViewProps)
       >
         <div className="benchmark-distribution-panel">
           <div className="benchmark-distribution-copy">
-            <span className="eyebrow">Current Benchmark Position</span>
+            <span className="eyebrow">Current Cohort Benchmark Signal</span>
             <strong>{metricMap.get("Trust-Weighted Benchmark Score") ?? "88.6"}</strong>
             <p>
-              Current signal sits above the cohort median inside the upper benchmark band, with
-              dispersion still shaping interpretation.
+              Current signal is derived from anonymized cohort computation. Quartiles describe the benchmark
+              distribution and do not reveal raw peer positions.
             </p>
+            <div className="benchmark-context-strip" aria-label="Benchmark quartiles">
+              <div className="benchmark-context-item">
+                <span className="eyebrow">Bottom Quartile</span>
+                <strong>{data.distribution?.bottomQuartile ?? "N/A"}</strong>
+              </div>
+              <div className="benchmark-context-item">
+                <span className="eyebrow">Median</span>
+                <strong>{data.distribution?.median ?? "N/A"}</strong>
+              </div>
+              <div className="benchmark-context-item">
+                <span className="eyebrow">Top Quartile</span>
+                <strong>{data.distribution?.topQuartile ?? "N/A"}</strong>
+              </div>
+            </div>
           </div>
           <div className="benchmark-distribution-visual" aria-label="Benchmark distribution with lower quartile, median, current benchmark, and upper quartile">
             <svg viewBox="0 0 640 190" role="img">
@@ -214,6 +261,14 @@ export function DeskBenchmarkView({ data: initialData }: DeskBenchmarkViewProps)
               {note}
             </p>
           ))}
+        </div>
+        <div className="processing-action-row">
+          <button type="button" className="record-button" onClick={() => onNavigate("position")}>
+            Compare to My Position
+          </button>
+          <button type="button" className="record-button" onClick={() => void result.refresh()}>
+            Refresh Benchmark
+          </button>
         </div>
       </SectionCard>
     </div>

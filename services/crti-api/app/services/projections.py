@@ -52,11 +52,14 @@ class ProjectionFactory:
         institution_id: int | None = None,
         contribution_package: dict | None = None,
         contribution_policy: dict | None = None,
+        expose_submissions: bool = True,
     ) -> CampaignProjection:
         campaign = self.repo.get_campaign(campaign_id)
         submissions = self.repo.list_submissions(campaign_id=campaign_id)
         if institution_id is not None:
             submissions = [item for item in submissions if item.institution_id == institution_id]
+        if not expose_submissions:
+            submissions = []
         return CampaignProjection(
             campaign=campaign,
             metrics=[
@@ -84,19 +87,20 @@ class ProjectionFactory:
     ) -> ProcessingProjection:
         run = self.repo.get_run(run_id)
         if run.run_status == "not_started":
+            context = processing_context or {}
             return ProcessingProjection(
                 run=run,
                 metrics=[
                     MetricDTO(label="Run Status", value="Waiting for contribution"),
-                    MetricDTO(label="Runtime Mode", value=run.runtime_mode),
+                    MetricDTO(label="Runtime Mode", value="Simulated TEE deterministic runtime"),
                     MetricDTO(label="Input Count", value="0"),
                     MetricDTO(label="Valid Inputs", value="0"),
                     MetricDTO(label="Invalid Inputs", value="0"),
-                    MetricDTO(label="Retention Policy", value=run.retention_policy_status),
+                    MetricDTO(label="Retention Policy", value="No raw payload retention"),
                     MetricDTO(label="Attestation Ref", value="Pending"),
-                    MetricDTO(label="Release Readiness", value="draft"),
+                    MetricDTO(label="Release Readiness", value="Draft / Not ready"),
                 ],
-                lifecycle=[
+                lifecycle=context.get("lifecycle") or [
                     "waiting for institution contribution package",
                     "confidential processing not started",
                     "no raw contribution package received",
@@ -104,43 +108,61 @@ class ProjectionFactory:
                 ],
                 evidence_refs=[],
                 actions=actions,
-                processing_context=processing_context or {},
+                processing_context=context,
             )
         attestation = self.repo.get_attestation_for_run(run.id)
+        context = processing_context or {}
         return ProcessingProjection(
             run=run,
             metrics=[
-                MetricDTO(label="Run Status", value=run.run_status),
-                MetricDTO(label="Runtime Mode", value=run.runtime_mode),
+                MetricDTO(label="Run Status", value=run.run_status.replace("_", " ").title()),
+                MetricDTO(label="Runtime Mode", value="Simulated TEE deterministic runtime"),
                 MetricDTO(label="Input Count", value=str(run.input_count)),
                 MetricDTO(label="Valid Inputs", value=str(run.valid_submission_count)),
                 MetricDTO(label="Invalid Inputs", value=str(run.invalid_submission_count)),
-                MetricDTO(label="Retention Policy", value=run.retention_policy_status),
+                MetricDTO(label="Retention Policy", value="No raw payload retention"),
                 MetricDTO(label="Attestation Ref", value=run.attestation_ref or "Pending"),
-                MetricDTO(label="Release Readiness", value=str(run.notes_json.get("release_readiness", "draft"))),
+                MetricDTO(label="Release Readiness", value=str(run.notes_json.get("release_readiness", "draft")).replace("_", " ").title()),
             ],
-            lifecycle=[
+            lifecycle=context.get("lifecycle") or [
                 "submission reviewed",
-                "processing run triggered",
-                "benchmark snapshot computed",
-                "institution outputs generated",
+                "simulated TEE processing completed",
+                "derived outputs generated",
                 "attestation reference generated",
-                "audit package prepared",
+                "release pending" if run.run_status != "released" else "release approved",
+                "institution outputs available" if run.run_status == "released" else "institution outputs staged",
+                "audit handoff ready" if run.run_status == "released" else "audit handoff prepared",
             ],
             evidence_refs=[attestation.ref_code, "runtime-manifest", "retention-checkpoint"],
             actions=actions,
-            processing_context=processing_context or {},
+            processing_context=context,
         )
 
-    def benchmark_projection(self, scenario: str | None, actions: list[ActionDTO]) -> BenchmarkProjection:
+    def benchmark_projection(
+        self,
+        scenario: str | None,
+        actions: list[ActionDTO],
+        benchmark_context: dict | None = None,
+        expose_outputs: bool = True,
+    ) -> BenchmarkProjection:
         snapshot = self.repo.get_snapshot_by_scenario(scenario)
+        if not expose_outputs:
+            return BenchmarkProjection(
+                snapshot=None,
+                primary_metrics=[],
+                secondary_metrics=[],
+                alerts=[],
+                distribution=None,
+                actions=actions,
+                benchmark_context=benchmark_context or {},
+            )
         return BenchmarkProjection(
             snapshot=snapshot,
             primary_metrics=[
                 MetricDTO(label="Average Liquidity", value=f"{snapshot.average_liquidity:.1f} / 100"),
                 MetricDTO(label="Average Repo Rate", value=f"{snapshot.average_repo_rate:.2f}%"),
                 MetricDTO(label="Average Haircut", value=f"{snapshot.average_haircut:.1f}%"),
-                MetricDTO(label="Aggregate Notional", value=money(snapshot.aggregate_notional)),
+                MetricDTO(label="Cohort Aggregate Notional", value=money(snapshot.aggregate_notional)),
                 MetricDTO(label="Contributor Count", value=str(snapshot.contributor_count)),
                 MetricDTO(label="Trust-Weighted Benchmark Score", value=f"{snapshot.benchmark_score:.1f}"),
                 MetricDTO(label="Liquidity Dispersion", value=f"{snapshot.dispersion:.1f} pts"),
@@ -152,6 +174,7 @@ class ProjectionFactory:
             alerts=snapshot.alerts_json,
             distribution=snapshot.distribution_json,
             actions=actions,
+            benchmark_context=benchmark_context or {},
         )
 
     def institution_output_projection(
@@ -160,8 +183,22 @@ class ProjectionFactory:
         scenario: str | None,
         actions: list[ActionDTO],
         include_recommendations: bool = True,
+        output_context: dict | None = None,
+        expose_output: bool = True,
     ) -> InstitutionOutputProjection:
         snapshot = self.repo.get_snapshot_by_scenario(scenario)
+        if not expose_output:
+            return InstitutionOutputProjection(
+                output=None,
+                metrics=[],
+                interpretation="Institution position output is not ready yet.",
+                explainable_summary="Alpha Bank must submit its prepared contribution package and complete simulated confidential processing before an institution-scoped comparison is released.",
+                recommended_actions=[],
+                audit_handoff=[],
+                audit_record=None,
+                actions=actions,
+                output_context=output_context or {},
+            )
         output = self.repo.get_output_for_institution(institution_id, snapshot.id)
         audit_record = self.repo.get_audit_record_for_output(output.id)
         record_status = audit_record.record_status if audit_record else "draft"
@@ -187,9 +224,16 @@ class ProjectionFactory:
             ],
             audit_record=audit_record,
             actions=actions,
+            output_context=output_context or {},
         )
 
-    def audit_projection(self, record_id: int, actions: list[ActionDTO]) -> AuditProjection:
+    def audit_projection(
+        self,
+        record_id: int,
+        actions: list[ActionDTO],
+        audit_context: dict | None = None,
+        audit_trail: list[str] | None = None,
+    ) -> AuditProjection:
         record = self.repo.get_audit_record(record_id)
         attestation = self.repo.attestations[record.attestation_reference_id]
         package = self.audit_package.build_package(
@@ -204,4 +248,6 @@ class ProjectionFactory:
             release_scope=package["release_scope"],
             evidence_refs=package["evidence_refs"],
             actions=actions,
+            audit_context=audit_context or {},
+            audit_trail=audit_trail or [],
         )

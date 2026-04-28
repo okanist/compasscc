@@ -118,6 +118,11 @@ export function DeskProcessingView({ data: initialData, onNavigate }: DeskProces
             {result.refreshStatus === "loading" ? "Refreshing..." : "Refresh Status"}
           </button>
         </div>
+        {!benchmarkReady ? (
+          <div className="role-state-panel">
+            Benchmark intelligence becomes available after the contribution package is submitted and processed.
+          </div>
+        ) : null}
         {result.refreshStatus === "error" && result.refreshMessage ? (
           <div className="role-state-panel role-state-panel--error">{result.refreshMessage}</div>
         ) : null}

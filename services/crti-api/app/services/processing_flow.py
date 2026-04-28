@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..api.errors import duplicate_action, invalid_transition, not_found
 from ..ledger import LedgerCommandAdapter
@@ -92,6 +92,12 @@ class ProcessingFlowService:
                 current_state=active_run.run_status,
             )
         submissions = self.repo.list_submissions(campaign_id=campaign_id)
+        pending_review = [item for item in submissions if item.review_status in {"submitted", "under_review"}]
+        if pending_review:
+            raise invalid_transition(
+                "Cannot trigger benchmark processing while submitted packages are still pending operator review.",
+                current_state="pending_review",
+            )
         valid = [item for item in submissions if item.review_status in SUBMISSION_BENCHMARK_VALID_STATES]
         blocked = [item for item in submissions if item.review_status in {SUBMISSION_REJECTED, "needs_attestation"}]
         if not valid:
@@ -112,7 +118,7 @@ class ProcessingFlowService:
             campaign_id=campaign_id,
             scenario=self.repo.get_campaign(campaign_id).scenario,
             submissions=valid,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         self.repo.snapshots[snapshot.id] = snapshot
         for submission in valid:
@@ -167,6 +173,14 @@ class ProcessingFlowService:
         if output_id not in self.repo.outputs:
             raise not_found("output", output_id)
         output = self.repo.get_output(output_id)
+        snapshot = self.repo.get_snapshot(output.benchmark_snapshot_id)
+        submission = self.repo.get_latest_submission_for_institution(snapshot.campaign_id, output.institution_id)
+        if submission is None:
+            raise invalid_transition(
+                "Institution output is not ready for recording until the contribution package is submitted and benchmark intelligence is ready.",
+                resource_id=output.id,
+                current_state="not_ready",
+            )
         if output.release_status not in {RELEASE_APPROVED, RELEASE_PUBLISHED}:
             raise invalid_transition(
                 "Institution output can only be recorded after release approval or publication.",

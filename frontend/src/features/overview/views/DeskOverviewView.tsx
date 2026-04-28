@@ -19,6 +19,7 @@ export function DeskOverviewView({ data: initialData, onNavigate }: DeskOverview
   const kpiMap = new Map(data.kpis.map((kpi) => [kpi.label, kpi.value]));
   const kpiToneMap = new Map(data.kpis.map((kpi) => [kpi.label, kpi.tone ?? "neutral"]));
   const deskOverview = data.deskOverview;
+  const benchmarkReady = Boolean(deskOverview?.context?.benchmarkReady);
   const benchmark = deskOverview?.benchmark;
   const networkIntelligence = deskOverview?.networkIntelligence;
   const metricValue = (label: string, fallback = "N/A") => kpiMap.get(label) ?? fallback;
@@ -26,18 +27,24 @@ export function DeskOverviewView({ data: initialData, onNavigate }: DeskOverview
     {
       label: "Benchmark Reliability",
       value: metricValue("Benchmark Reliability"),
-      detail: "Trust-weighted cohort quality based on contribution depth and attestation coverage",
+      detail: benchmarkReady
+        ? "Trust-weighted cohort quality based on contribution depth and attestation coverage"
+        : "Awaiting contribution submission before benchmark quality is generated",
       emphasis: "primary" as const
     },
     {
       label: "Attested Coverage",
       value: metricValue("Attested Coverage"),
-      detail: "Share of contributors with system-signed or externally attested inputs"
+      detail: benchmarkReady
+        ? "Share of contributors with system-signed or externally attested inputs"
+        : "Coverage will be calculated after the prepared package is submitted"
     },
     {
       label: "Cohort Depth",
       value: metricValue("Cohort Depth"),
-      detail: "Active participants contributing to the current benchmark cycle"
+      detail: benchmarkReady
+        ? "Active participants contributing to the current benchmark cycle"
+        : "Prepared contributors are not presented as a final benchmark cohort"
     },
     {
       label: "Active Campaigns",
@@ -125,7 +132,11 @@ export function DeskOverviewView({ data: initialData, onNavigate }: DeskOverview
             <div className="insight-panel__header">
               <div>
                 <h3>Liquidity Benchmark</h3>
-                <p>Trust-weighted benchmark for the repo-with-treasury-collateral cohort</p>
+                <p>
+                  {benchmarkReady
+                    ? "Trust-weighted benchmark for the repo-with-treasury-collateral cohort"
+                    : "Benchmark pending until the prepared contribution package is submitted"}
+                </p>
               </div>
               <button type="button" className="text-link text-link--button" onClick={() => onNavigate("benchmark")}>
                 View Details
@@ -135,7 +146,7 @@ export function DeskOverviewView({ data: initialData, onNavigate }: DeskOverview
             <div className="benchmark-callout">
               <div className="benchmark-callout__primary">
                 <strong>{benchmark?.averageLiquidity ?? "N/A"}</strong>
-                <span>Average Liquidity Score</span>
+                <span>{benchmarkReady ? "Average Liquidity Score" : "Submit contribution to generate benchmark intelligence"}</span>
               </div>
               <div className="benchmark-callout__delta">
                 <strong>{benchmark?.delta ?? metricValue("Own Benchmark Teaser")}</strong>

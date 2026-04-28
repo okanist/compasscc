@@ -2,11 +2,11 @@
 
 **Compass helps Canton institutions benchmark treasury and collateral performance privately, without exposing raw positions.**
 
-Compass is a privacy-preserving institutional intelligence product for repo, treasury, and collateral workflows on Canton. It lets institutions contribute selected benchmark fields, process them through a confidential computation workflow, generate trust-weighted benchmark intelligence, compare institution-level positioning against the active cohort, and produce auditable outputs without exposing raw proprietary positions.
+Compass is a privacy-preserving institutional intelligence product for repo, treasury, and collateral workflows on Canton. Institutions contribute selected benchmark fields, and Compass produces trust-weighted benchmark intelligence, institution-scoped comparison outputs, and audit-worthy lifecycle records.
 
-The current repository includes a working multi-role MVP across **Institution Desk**, **Operator**, and **Auditor** workflows. The FastAPI backend serves role-specific projection views, supports benchmark computation and institution-level outputs, and includes hardened lifecycle transitions for contribution, processing, release, and audit record states. The demo is seed-backed for repeatability, while the repository includes SQLAlchemy/Alembic persistence scaffolding and Canton/Daml adapter seams for future live ledger integration.
+The current repository is a seed-backed, simulation-driven MVP, but it implements a working multi-role lifecycle across **Institution Desk**, **Operator**, and **Auditor**. The FastAPI backend serves role-specific projections, supports benchmark computation and institution-level outputs, and enforces lifecycle transitions for contribution, processing, release, and audit record states.
 
-The MVP uses a prepared Alpha Bank contribution package and a simulated TEE/confidential processing boundary. This is intentional: the demo focuses on the workflow, privacy model, benchmark computation, lifecycle state, and auditability rather than claiming a production bank connector or production confidential compute deployment.
+The MVP uses prepared contribution packages, simulated TEE/confidential processing state, and Canton-style audit references. It does not claim a production bank connector, production confidential compute deployment, or live Canton command submission.
 
 ---
 
@@ -22,16 +22,16 @@ The MVP uses a prepared Alpha Bank contribution package and a simulated TEE/conf
 
 ## Canton / RWA Context
 
-Compass is positioned for the institutional RWA and capital-markets direction that Canton is already targeting: tokenized collateral mobility, financing workflows, treasury and balance-sheet optimization, repo-related workflows, selective disclosure, and auditable settlement processes.
+Compass is positioned for institutional RWA and capital-markets workflows: tokenized collateral mobility, financing workflows, treasury and balance-sheet optimization, repo-related workflows, selective disclosure, and auditable settlement processes.
 
-Compass does **not** assume that every bank's internal treasury dataset already lives on Canton. Instead, Compass is designed as an intelligence layer around these workflows:
+Compass does **not** assume every bank's internal treasury dataset already lives on Canton. Compass is designed as an intelligence layer around these workflows:
 
-1. institutions contribute selected benchmark fields;
-2. raw institutional positions remain protected;
-3. confidential computation produces derived benchmark outputs;
-4. Canton/Daml records workflow state, disclosure, release control, and audit-worthy lifecycle events.
+1. Institutions contribute selected benchmark fields.
+2. Raw institutional positions remain protected.
+3. Confidential computation produces derived benchmark outputs.
+4. Canton/Daml records workflow authority, role-based disclosure, lifecycle state, release control, attestation references, and audit-worthy records.
 
-In short: Canton provides the privacy-aware institutional workflow fabric; Compass adds a benchmark intelligence layer for treasury, repo, and collateral performance.
+Analytics remain off-ledger by design. Heavy computation, benchmark scoring, reliability scoring, and projection generation are handled by the FastAPI backend.
 
 ---
 
@@ -39,33 +39,59 @@ In short: Canton provides the privacy-aware institutional workflow fabric; Compa
 
 ### Implemented
 
-- Multi-role frontend shell for Institution Desk, Operator, and Auditor
-- Working Institution Desk happy path
-- Working Operator workflow
-- Working Auditor evidence/read flow
+- Institution Desk full happy path
+- Operator review, processing trigger, and release lifecycle
+- Auditor read-only evidence flow
+- Reset-to-finalized demo flow
+- Simulated TEE/confidential processing boundary
+- Canton-style record finalization with references such as `CANTON-REC-0001`
+- Role-aware sidebar/navigation and footer identity
+- Lifecycle-aware not-ready, ready, pending, released, and finalized states
+- Auditor projections sanitized to avoid raw data exposure
 - FastAPI backend with role-specific endpoints
 - Projection-oriented backend services
 - Seed-backed benchmark, processing, institution output, and audit state
 - Prepared Alpha Bank contribution package with privacy-safe preview fields
-- Lifecycle-aware contribution submission flow
-- Simulated TEE/confidential processing boundary for the MVP demo
 - Hardened lifecycle transitions for submissions, processing runs, releases, and audit records
 - Idempotent duplicate handling for Desk submissions, release approvals, and Record-to-Canton
-- Consistent API error handling
 - Development reset endpoint for repeatable demos
 - Backend smoke tests covering Desk, Operator, and Auditor flows
 - SQLAlchemy repository boundary and Alembic persistence scaffold
-- Daml/Canton workflow skeleton
-- Canton/Daml adapter seams for future command submission and event ingestion
+- Daml/Canton workflow skeleton and adapter seams for future command submission and event ingestion
 
-### Not yet implemented
+### Not Yet Implemented
 
-- Fully persistent production database mode
-- Live bank-side data connector
+- Production persistent database mode
+- Live bank-side connector
 - Live Canton event ingestion
 - Live Daml command submission bridge
 - Production-grade confidential compute / TEE integration
-- Full export/evidence packaging workflow
+- External real data integrations
+- Fully exportable evidence packages
+
+---
+
+## Validated Demo Lifecycle
+
+The final validated MVP flow is:
+
+1. Reset demo state.
+2. Institution Desk sees a prepared Alpha Bank contribution package.
+3. Institution Desk submits a System-signed package.
+4. Confidential Processing shows simulated TEE completed and `benchmark_ready=true`.
+5. Benchmark & Insights shows derived cohort benchmark metrics.
+6. My Position shows Alpha Bank's institution-scoped comparison output.
+7. Operator reviews Alpha Bank, resolves Northline, triggers benchmark processing, and approves release.
+8. Institution Desk records the released output and receives a Canton-style reference.
+9. Auditor reviews Policy Evidence, Benchmark Audit, Output Audit, and Audit Record.
+
+The demo can be reset through:
+
+```bash
+curl -X POST http://localhost:8000/api/dev/reset-demo-state
+```
+
+After reset, Alpha Bank's contribution package is prepared but not yet submitted, benchmark release is not ready, and audit record finalization is not shown.
 
 ---
 
@@ -73,130 +99,116 @@ In short: Canton provides the privacy-aware institutional workflow fabric; Compa
 
 Compass is repo-native, treasury-aware, and deterministic first. It is not a retail analytics app and it is not positioned as autonomous AI.
 
-The product flow is organized around five core screens:
+The product flow is organized around role-specific screens:
 
-1. **Network Intelligence Overview**  
-   Shows that privacy-preserving contribution can still generate network-wide benchmark intelligence.
+### Institution Desk
 
-2. **Contribution Campaign**  
-   Lets the Institution Desk review a prepared contribution package, confirm the contribution assurance class, and submit selected benchmark fields without exposing full raw positions.
+- **Overview**: Shows package readiness and benchmark state.
+- **Contribute Data**: Reviews the prepared contribution package and assurance class.
+- **Submit Package**: Confirms submission into the simulated confidential processing flow.
+- **Confidential Processing**: Shows simulated TEE status, benchmark readiness, retention boundary, and attestation state.
+- **Benchmark & Insights**: Shows derived cohort benchmark metrics.
+- **My Position**: Shows Alpha Bank's institution-scoped derived output.
+- **Record to Canton**: Finalizes a Canton-style audit reference for the released derived output.
 
-3. **Confidential Processing**  
-   Shows how selected contribution fields move through a simulated TEE/confidential processing boundary before derived outputs are released.
+### Operator
 
-4. **Benchmark Intelligence**  
-   Surfaces anonymized aggregate signals, benchmark reliability, cohort depth, and scenario-level intelligence.
+- **Operations Overview**: Monitors submissions, processing health, release readiness, and output availability.
+- **Contribution Review**: Reviews submitted packages and resolves pending submissions.
+- **Processing Control**: Triggers benchmark processing after review gates pass.
+- **Benchmark Operations**: Reviews construction quality and release readiness.
+- **Institution Output Review**: Reviews operator-safe output state; no Record-to-Canton action is exposed.
 
-5. **My Position Intelligence**  
-   Compares one institution to the benchmark and produces an auditable, institution-scoped explainable summary.
+### Auditor
+
+- **Audit Overview**: Reviews released/finalized state and high-level evidence status.
+- **Policy Evidence**: Reviews contribution policy evidence and attestation rules.
+- **Benchmark Audit**: Reviews benchmark release audit, construction quality, and processing evidence subsection.
+- **Output Audit**: Reviews institution-scoped output audit state and release-approved package metadata.
+- **Audit Record**: Reviews finalized Canton-style audit record references and audit trail events.
 
 ---
 
 ## Real-World Data Flow
 
-In a production deployment, institutions would not manually type full raw repo or treasury positions into Compass. Raw data would remain inside the bank's own treasury, collateral management, risk, or internal data warehouse systems.
+In a production deployment, banks would not manually type full raw repo or treasury positions into Compass. Raw data would remain in bank systems such as treasury, collateral management, risk, or internal data warehouses.
 
-A bank-side connector or adapter would extract only the selected benchmark fields required by an active campaign. Before leaving the institution-side environment, those fields would be transformed into privacy-safe benchmark inputs. For example:
+A bank-side connector would extract only the selected benchmark fields required by an active campaign. Exact values would be transformed before leaving the institution-side environment:
 
 | Raw institutional input | Privacy-safe benchmark contribution |
 |---|---|
 | Exact repo notional | Bucketed notional range |
-| Exact secured funding rate | Normalized funding rate |
-| Detailed collateral inventory | Collateral concentration summary |
-| Exact maturity dates | Average maturity bucket |
-| Internal liquidity ratio | Policy-normalized liquidity input |
+| Exact secured funding rate | Normalized funding value |
+| Detailed collateral positions | Collateral concentration summary |
+| Exact maturity profile | Maturity bucket |
+| Liquidity inputs | Policy-normalized benchmark field |
 
-The result is a **contribution package**, not a full raw position dump. Depending on the assurance level, the package may be self-reported, system-signed, or externally attested.
+The result is a **contribution package**, not a raw position dump. The package may be self-reported, system-signed, or policy-recognized externally attested.
 
-In a production version, this package would be sent into a confidential compute or TEE boundary for deterministic benchmark computation. The confidential boundary would perform:
+In production, this package would be sent into a confidential compute or TEE boundary for deterministic benchmark computation. The boundary would perform policy validation, field eligibility checks, trust weighting, cohort aggregation, outlier handling, benchmark score calculation, reliability scoring, and institution-scoped comparison.
 
-- policy validation
-- field eligibility checks
-- trust weighting
-- cohort aggregation
-- outlier handling
-- benchmark score calculation
-- reliability scoring
-- institution-scoped comparison
+Only derived outputs are released:
 
-Raw institutional positions are not released to peers, operators, auditors, or benchmark viewers. Compass releases derived intelligence only, such as:
-
-- benchmark reliability scores
-- cohort-level benchmark metrics
-- dispersion indicators
-- attested coverage
-- institution-scoped comparison outputs
-- attestation references
-- audit record references
-
-Canton/Daml is used for workflow authority, role-based disclosure, lifecycle state, release control, and audit-worthy records. Heavy analytics and raw data processing remain off-ledger by design.
+- Benchmark reliability package
+- Cohort-level benchmark metrics
+- Dispersion indicators
+- Attested coverage
+- Institution-scoped comparison outputs
+- Attestation references
+- Audit record references
 
 ---
 
 ## MVP Simulation Note
 
-The current hackathon MVP uses a seed-backed prepared contribution package for Alpha Bank. The Institution Desk reviews privacy-safe package fields, selects or confirms the contribution assurance class, and submits the package for confidential processing.
+The current hackathon MVP uses seed-backed prepared contribution packages. The Institution Desk reviews privacy-safe package fields, confirms the contribution assurance class, and submits the package for simulated confidential processing.
 
-The TEE/confidential processing boundary is simulated through backend projections and UI state. The simulation is used to demonstrate the intended production workflow:
+The TEE/confidential processing boundary is simulated through backend lifecycle projections and UI state:
 
 ```text
 Prepared contribution package
-        ↓
-Simulated TEE / confidential boundary
-        ↓
-Policy checks + deterministic benchmark computation
-        ↓
-Derived benchmark intelligence
-        ↓
-Institution-scoped output
-        ↓
-Canton-style audit reference
+  -> Simulated TEE / confidential boundary
+  -> Policy checks + deterministic benchmark computation
+  -> Derived benchmark intelligence
+  -> Institution-scoped output
+  -> Canton-style audit reference
 ```
 
-The current Daml workflow templates model campaign, submission, processing, release, institution output, attestation, and audit record lifecycles. Future integration seams exist for live Canton event ingestion, Daml command submission, projection synchronization, and production confidential compute execution.
+Canton recording is represented by a Canton-style reference such as `CANTON-REC-0001` or `CANTON-REC-0002`. Live Daml command submission, Canton event ingestion, and production TEE integration are future integration seams.
 
 ---
 
-## Role Model
+## Canton / Daml Role
 
-### Institution Desk
+The `canton/` package contains a workflow-oriented Daml skeleton for Compass, covering:
 
-Reviews and submits the institution's prepared contribution package, follows confidential processing state, reviews institution-relative benchmark output, and records auditable outputs.
+- Campaign lifecycle
+- Contribution submission
+- Submission review
+- Processing runs
+- Benchmark release
+- Institution-scoped outputs
+- Attestation references
+- Audit records
 
-### Operator
+Analytics remain off-ledger. Daml/Canton is used for workflow authority, role-based disclosure, lifecycle state, release control, attestation references, and audit-worthy records. Heavy computation, benchmark scoring, reliability scoring, and projection generation are handled by the FastAPI backend.
 
-Reviews contribution quality, controls benchmark processing, manages release readiness, and oversees institution output flow.
-
-### Auditor
-
-Inspects evidence, attestation references, release scope, retention policy status, and audit record integrity.
+The current Daml layer is implementation-ready scaffolding. Backend bridge seams are intentionally left as TODOs for Canton event ingestion, Daml command submission, projection synchronization, and record finalization handshakes.
 
 ---
 
-## Working Demo Flow
+## Raw Data Safety
 
-The main demo path is:
+Final Auditor projections are sanitized:
 
-1. Start as **Institution Desk**
-2. Open Overview
-3. Confirm the active contribution card shows a prepared package ready to submit
-4. Go to Contribute Data
-5. Review the privacy-safe contribution package
-6. Submit the package into the simulated TEE/confidential processing boundary
-7. View Confidential Processing state
-8. Open Benchmark Intelligence
-9. Open My Position Intelligence
-10. Click Record to Canton
-11. Switch to Operator to inspect workflow state
-12. Switch to Auditor to inspect evidence, release scope, and audit record state
+- No raw Alpha Bank contribution values
+- No raw peer positions
+- No named peer breakdowns
+- No payload dumps
+- Auditor screens expose audit metadata, release scope, references, lifecycle state, and derived output summaries only
+- Release scope is **derived outputs only**
 
-The demo can be reset through the development reset endpoint:
-
-```bash
-curl -X POST http://localhost:8000/api/dev/reset-demo-state
-```
-
-After reset, the Institution Desk demo starts with Alpha Bank's contribution package prepared but not yet submitted.
+Operators do not receive raw peer breakdowns. Institution Desk sees only its own prepared contribution package and its own institution-scoped derived output.
 
 ---
 
@@ -204,17 +216,16 @@ After reset, the Institution Desk demo starts with Alpha Bank's contribution pac
 
 ```text
 .
-├── README.md
-├── LICENSE
-├── .gitignore
-├── docs/
-├── frontend/
-├── services/
-├── canton/
-└── quickstart/
+|-- README.md
+|-- LICENSE
+|-- docs/
+|-- frontend/
+|-- services/
+|-- canton/
+`-- quickstart/
 ```
 
-### Key folders
+### Key Folders
 
 - `frontend/` -> Vite frontend with role-aware Compass UI
 - `services/crti-api/` -> FastAPI backend with projections, role-specific services, lifecycle guards, and seed-backed MVP state
@@ -223,7 +234,7 @@ After reset, the Institution Desk demo starts with Alpha Bank's contribution pac
 - `canton/` -> Daml workflow skeleton for campaign, contribution, processing, release, institution output, and audit lifecycle
 - `quickstart/` -> Canton runtime / integration area for future network attachment
 
-See `PROJECT_LAYOUT.md` for a folder-by-folder breakdown.
+See `docs/PROJECT_LAYOUT.md` for a folder-by-folder breakdown.
 
 ---
 
@@ -291,6 +302,7 @@ The backend is currently seed-backed rather than fully persistent, but it powers
 ### Auditor
 
 - `GET /api/auditor/overview`
+- `GET /api/auditor/campaigns/:campaignId/policy`
 - `GET /api/auditor/processing/:runId/evidence`
 - `GET /api/auditor/benchmark/:snapshotId/audit`
 - `GET /api/auditor/institution-output/:outputId`
@@ -302,45 +314,28 @@ The backend is currently seed-backed rather than fully persistent, but it powers
 
 ---
 
-## Daml / Canton Workflow Notes
-
-The `canton/` package contains a workflow-oriented Daml skeleton for Compass, covering:
-
-- campaign lifecycle
-- contribution submission
-- submission review
-- processing runs
-- benchmark release
-- institution-scoped outputs
-- attestation references
-- audit records
-
-Analytics remain off-ledger by design. Benchmark computation, reliability scoring, projections, and interpretation are handled in the backend, while Daml/Canton is used for workflow authority, role-based disclosure, lifecycle control, release control, and auditable state.
-
-The current Daml layer is implementation-ready scaffolding. Backend bridge seams are intentionally left as TODOs for:
-
-- Canton event ingestion
-- Daml command submission
-- projection synchronization
-- record-to-Canton finalization handshake
-
----
-
 ## Verification
 
-Current checks:
+Latest validated checks:
 
 ```bash
-pytest
-python -m compileall app
 npm run build
+python -m pytest tests/test_smoke_flows.py
 ```
+
+Also validated:
+
+- Custom reset-to-finalized lifecycle script passed
+- Static check for hash-only anchors passed
+- Auditor mutation endpoint usage absent
+- Auditor raw data projection safety checked
+- `datetime.utcnow()` deprecation warnings removed from backend tests
 
 Backend smoke tests cover:
 
 - Institution Desk read, submit, processing, benchmark, position, and record flow
 - Operator overview, pending submission review, processing trigger, release approval, and institution output review
-- Auditor overview, processing evidence, benchmark audit, institution output audit, and audit record detail
+- Auditor overview, policy evidence, benchmark audit, output audit, and audit record detail
 
 ---
 
@@ -353,4 +348,5 @@ Backend smoke tests cover:
 - Add Canton event ingestion and projection synchronization
 - Attach a live Canton runtime under `quickstart/`
 - Add production-grade confidential compute / TEE integration
+- Add external real data integrations
 - Add exportable audit/evidence packages

@@ -65,6 +65,7 @@ function mapOverviewProjection(payload: any): OverviewData {
   const overviewSections = payload.overview_sections ?? {};
   const benchmark = overviewSections.benchmark ?? {};
   const networkIntelligence = overviewSections.network_intelligence ?? {};
+  const overviewContext = overviewSections.overview_context ?? {};
 
   return {
     kpis: (payload.metrics ?? []).map((metric: any) => ({
@@ -88,6 +89,11 @@ function mapOverviewProjection(payload: any): OverviewData {
       "Auditable Output"
     ],
     deskOverview: {
+      context: {
+        benchmarkReady: Boolean(overviewContext.benchmark_ready),
+        nextAction: overviewContext.next_action,
+        message: overviewContext.message
+      },
       benchmark: {
         title: benchmark.title,
         averageLiquidity: benchmark.average_liquidity,
@@ -266,6 +272,7 @@ function mapProcessingProjection(payload: any): ProcessingData {
       policyChecks: context.policy_checks,
       benchmarkReadiness: context.benchmark_readiness,
       benchmarkReady,
+      nextAction: context.next_action,
       rawDataExposure: context.raw_data_exposure,
       retention: context.retention,
       attestationRef: context.attestation_ref,
@@ -274,7 +281,15 @@ function mapProcessingProjection(payload: any): ProcessingData {
       releasedScope: context.released_scope
     },
     steps: run.run_status === "not_started"
-      ? waitingSteps
+      ? waitingSteps.map((step) => {
+          if (step.label === "Run status" && benchmarkReady) {
+            return { ...step, value: "Benchmark intelligence ready", status: "Ready", tone: "success", evidence: "Contribution package processed in the simulated confidential boundary" };
+          }
+          if (step.label === "Simulated TEE boundary" && benchmarkReady) {
+            return { ...step, value: context.simulated_tee_status ?? "Completed", status: "Completed", tone: "success" };
+          }
+          return step;
+        })
       : [
           { label: "Run status", value: titleCase(run.run_status), status: benchmarkReady ? "Ready" : titleCase(run.run_status), tone: benchmarkReady ? "success" : "cool", evidence: titleCase(run.run_status) },
           { label: "Contribution package received", value: `${run.input_count} selected contribution packages accepted`, status: "Received", tone: "warm", evidence: context.contribution_status ?? "Received" },
@@ -288,25 +303,56 @@ function mapProcessingProjection(payload: any): ProcessingData {
 }
 
 function mapBenchmarkProjection(payload: any): BenchmarkData {
+  const context = payload.benchmark_context ?? {};
+  const selectedScenario = context.selected_scenario ?? payload.snapshot?.scenario ?? "Active benchmark scenario";
   return {
-    scenarioOptions: [payload.snapshot.scenario],
-    selectedScenario: payload.snapshot.scenario,
+    scenarioOptions: context.scenario_options?.length ? context.scenario_options : [selectedScenario],
+    selectedScenario,
     primaryMetrics: payload.primary_metrics ?? [],
     secondaryMetrics: payload.secondary_metrics ?? [],
-    alerts: payload.alerts ?? []
+    alerts: payload.alerts ?? [],
+    distribution: {
+      topQuartile: payload.distribution?.top_quartile,
+      median: payload.distribution?.median,
+      bottomQuartile: payload.distribution?.bottom_quartile
+    },
+    context: {
+      benchmarkReady: Boolean(context.benchmark_ready),
+      nextAction: context.next_action,
+      activeCohort: context.active_cohort,
+      attestedCoverage: context.attested_coverage,
+      lastRefresh: context.last_refresh ? new Date(context.last_refresh).toLocaleString() : undefined,
+      networkSignalSummary: context.network_signal_summary,
+      confidenceNotes: context.confidence_notes,
+      notReadyMessage: context.not_ready_message
+    }
   };
 }
 
 function mapPositionProjection(payload: any): PositionData {
+  const context = payload.output_context ?? {};
   return {
-    outputId: payload.output.id,
+    outputId: payload.output?.id ?? context.output_id,
     metrics: payload.metrics ?? [],
     suggestedInterpretation: payload.interpretation,
     explainableSummary: payload.explainable_summary,
     recommendedActions: payload.recommended_actions ?? [],
     auditHandoff: payload.audit_handoff ?? [],
-    recordStatus: payload.audit_record?.record_status,
-    cantonRecordRef: payload.audit_record?.canton_record_ref ?? null
+    recordStatus: payload.audit_record?.record_status ?? context.record_lifecycle,
+    cantonRecordRef: payload.audit_record?.canton_record_ref ?? context.canton_record_ref ?? null,
+    context: {
+      outputReady: Boolean(context.output_ready),
+      recordable: Boolean(context.recordable),
+      nextAction: context.next_action,
+      selectedScenario: context.selected_scenario,
+      institutionName: context.institution_name,
+      benchmarkReference: context.benchmark_reference,
+      recordLifecycle: context.record_lifecycle,
+      createdAt: context.created_at ? new Date(context.created_at).toLocaleString() : undefined,
+      recordedAt: context.recorded_at ? new Date(context.recorded_at).toLocaleString() : undefined,
+      privacySummary: context.privacy_summary,
+      notReadyMessage: context.not_ready_message
+    }
   };
 }
 
@@ -363,8 +409,18 @@ export async function recordDeskPosition(outputId: number): Promise<CommandResul
   });
 }
 
+export async function resetDemoState(): Promise<CommandResult> {
+  return apiFetch("/api/dev/reset-demo-state", {
+    method: "POST"
+  });
+}
+
 export async function getOperatorOverview(): Promise<any> {
   return apiFetch("/api/operator/overview");
+}
+
+export async function getOperatorCampaign(campaignId = 1): Promise<any> {
+  return apiFetch(`/api/operator/campaigns/${campaignId}`);
 }
 
 export async function getOperatorPendingSubmissions(): Promise<OperatorPendingSubmission[]> {
@@ -408,6 +464,10 @@ export async function getAuditorOverview(): Promise<any> {
   return apiFetch("/api/auditor/overview");
 }
 
+export async function getAuditorPolicyEvidence(campaignId = 1): Promise<any> {
+  return apiFetch(`/api/auditor/campaigns/${campaignId}/policy`);
+}
+
 export async function getAuditorProcessingEvidence(runId = 1): Promise<any> {
   return apiFetch(`/api/auditor/processing/${runId}/evidence`);
 }
@@ -425,27 +485,52 @@ export async function getAuditorAuditRecord(recordId = 1): Promise<AuditorAuditR
   const record = payload.record;
   const attestation = payload.attestation;
   const releaseScope = payload.release_scope ?? {};
+  const context = payload.audit_context ?? {};
   const included = (releaseScope.included ?? []).map((item: string) => `Included: ${item}`);
   const excluded = (releaseScope.excluded ?? []).map((item: string) => `Excluded: ${item}`);
+  const finalized = Boolean(context.finalized);
+  const releaseReady = Boolean(context.release_ready);
 
   return {
     metrics: [
-      { label: "Record ID", value: String(record.id), detail: "Audit record identifier" },
-      { label: "Record Status", value: titleCase(record.record_status), detail: record.recorded_at ? "Finalized timestamp available" : "Awaiting Canton finalization" },
-      { label: "Output ID", value: String(record.institution_output_id ?? "n/a"), detail: "Institution-scoped output reference" },
-      { label: "Snapshot ID", value: String(record.benchmark_snapshot_id ?? "n/a"), detail: "Benchmark snapshot reference" },
-      { label: "Attestation Ref", value: attestation.ref_code, detail: attestation.attestation_type },
-      { label: "Canton Record Ref", value: record.canton_record_ref ?? "Pending", detail: "Ledger-oriented record reference" },
+      { label: "Record Lifecycle", value: finalized ? "Finalized" : releaseReady ? "Released / Not finalized" : "Not finalized", detail: context.lifecycle_message ?? "Audit record lifecycle state" },
+      { label: "Canton-style Record Reference", value: context.canton_record_ref ?? "Pending", detail: finalized ? "Finalized read-only reference" : "Appears after Institution Desk records to Canton" },
+      { label: "Institution", value: context.institution ?? "Alpha Bank", detail: "Institution-scoped audit record" },
+      { label: "Record ID", value: context.record_id ? String(context.record_id) : "Not finalized", detail: "Audit record identifier" },
+      { label: "Output ID", value: context.output_id ? String(context.output_id) : "Unavailable", detail: "Institution-scoped output reference" },
+      { label: "Benchmark Snapshot Reference", value: context.benchmark_snapshot_reference ?? "Awaiting release", detail: "Benchmark snapshot linkage" },
+      { label: "Run ID", value: context.run_id ? `Run ${context.run_id}` : "Not started", detail: "Processing run reference" },
+      { label: "Release Reference", value: context.release_reference ?? "Awaiting release approval", detail: "Release lifecycle reference" },
+      { label: "Attestation Reference", value: context.attestation_reference ?? attestation.ref_code, detail: attestation.attestation_type },
+      { label: "Retention Status", value: context.retention_status ?? "No raw payload retention", detail: "Raw payload persistence boundary" },
+      { label: "Raw Data Exposure", value: context.raw_data_exposure ?? "None", detail: "No raw institutional contribution data exposed" },
       { label: "Created At", value: new Date(record.created_at).toLocaleString(), detail: `Created by ${record.created_by}` },
-      { label: "Finalized At", value: record.recorded_at ? new Date(record.recorded_at).toLocaleString() : "Not finalized", detail: "recorded_to_canton state" },
-      { label: "Recorded To Canton", value: record.canton_record_ref ? "Yes" : "No", detail: record.record_status }
+      { label: "Finalized At", value: context.finalized_at ? new Date(context.finalized_at).toLocaleString() : "Not finalized", detail: "Canton-style record finalization timestamp" }
     ],
     releaseScope: [...included, ...excluded],
     evidenceRefs: payload.evidence_refs ?? [],
+    auditTrail: payload.audit_trail ?? [],
+    context: {
+      recordId: context.record_id,
+      recordLifecycle: context.record_lifecycle,
+      lifecycleMessage: context.lifecycle_message,
+      cantonRecordRef: context.canton_record_ref,
+      institution: context.institution,
+      outputId: context.output_id,
+      benchmarkSnapshotReference: context.benchmark_snapshot_reference,
+      runId: context.run_id,
+      releaseReference: context.release_reference,
+      attestationReference: context.attestation_reference,
+      retentionStatus: context.retention_status,
+      rawDataExposure: context.raw_data_exposure,
+      finalizedAt: context.finalized_at,
+      releaseReady,
+      finalized
+    },
     integrityNotes: [
-      "Audit record links output, benchmark snapshot, and runtime attestation.",
+      finalized ? "Audit record links output, benchmark snapshot, and runtime attestation." : context.lifecycle_message ?? "Audit record not finalized yet.",
       "Release scope excludes raw peer contributions and raw institution payload.",
-      "Record integrity is seed-backed until Canton command finalization is connected."
+      "Auditor view is read-only and exposes references plus audit metadata only."
     ]
   };
 }

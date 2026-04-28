@@ -13,6 +13,11 @@ export interface OverviewData {
   };
   processStrip: string[];
   deskOverview?: {
+    context?: {
+      benchmarkReady?: boolean;
+      nextAction?: "submit_contribution" | "view_benchmark";
+      message?: string;
+    };
     benchmark?: {
       title?: string;
       averageLiquidity?: string;
@@ -109,6 +114,7 @@ export interface ProcessingData {
     policyChecks?: string;
     benchmarkReadiness?: string;
     benchmarkReady?: boolean;
+    nextAction?: "submit_contribution" | "view_benchmark";
     rawDataExposure?: string;
     retention?: string;
     attestationRef?: string;
@@ -121,9 +127,24 @@ export interface ProcessingData {
 export interface BenchmarkData {
   scenarioOptions: string[];
   selectedScenario: string;
-  primaryMetrics: { label: string; value: string }[];
-  secondaryMetrics: { label: string; value: string }[];
+  primaryMetrics: { label: string; value: string; detail?: string | null }[];
+  secondaryMetrics: { label: string; value: string; detail?: string | null }[];
   alerts: string[];
+  distribution?: {
+    topQuartile?: number;
+    median?: number;
+    bottomQuartile?: number;
+  };
+  context?: {
+    benchmarkReady?: boolean;
+    nextAction?: "submit_contribution" | "view_benchmark";
+    activeCohort?: string;
+    attestedCoverage?: string;
+    lastRefresh?: string;
+    networkSignalSummary?: string;
+    confidenceNotes?: string[];
+    notReadyMessage?: string;
+  };
 }
 
 export interface PositionData {
@@ -135,6 +156,19 @@ export interface PositionData {
   auditHandoff?: string[];
   recordStatus?: string;
   cantonRecordRef?: string | null;
+  context?: {
+    outputReady?: boolean;
+    recordable?: boolean;
+    nextAction?: "submit_contribution" | "view_benchmark" | "record_to_canton";
+    selectedScenario?: string;
+    institutionName?: string;
+    benchmarkReference?: string | null;
+    recordLifecycle?: string;
+    createdAt?: string;
+    recordedAt?: string;
+    privacySummary?: string;
+    notReadyMessage?: string;
+  };
 }
 
 export interface ApiPayload {
@@ -164,6 +198,8 @@ export interface OperatorPendingSubmission {
   review_status: string;
   attestation_status: string;
   confidence_tier: string;
+  submitted_at?: string;
+  updated_at?: string;
 }
 
 export interface AuditorAuditRecordData {
@@ -171,5 +207,23 @@ export interface AuditorAuditRecordData {
   releaseScope: string[];
   evidenceRefs: string[];
   integrityNotes: string[];
+  auditTrail: string[];
+  context: {
+    recordId?: number | null;
+    recordLifecycle?: string;
+    lifecycleMessage?: string;
+    cantonRecordRef?: string | null;
+    institution?: string;
+    outputId?: number | null;
+    benchmarkSnapshotReference?: string | null;
+    runId?: number | null;
+    releaseReference?: string | null;
+    attestationReference?: string;
+    retentionStatus?: string;
+    rawDataExposure?: string;
+    finalizedAt?: string | null;
+    releaseReady?: boolean;
+    finalized?: boolean;
+  };
 }
 

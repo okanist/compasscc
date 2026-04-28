@@ -1,26 +1,49 @@
 import type { OperatorPendingSubmission, OverviewData } from "../../data/types";
 import type { ViewResult } from "../../components/primitives/ViewState";
 import type { RoleAction, RoleMetric } from "../../components/primitives/RoleViewSections";
-import { useEffect, useState } from "react";
-import { getAuditorOverview, getDeskOverview, getOperatorOverview, getOperatorPendingSubmissions, reviewOperatorSubmission } from "../../data/api";
+import { useCallback, useEffect, useState } from "react";
+import { getAuditorOverview, getDeskOverview, getOperatorOverview, getOperatorPendingSubmissions, reviewOperatorSubmission, triggerOperatorProcessing } from "../../data/api";
 
 export interface OperatorOverviewData {
   metrics: RoleMetric[];
   health: RoleMetric[];
   actions: RoleAction[];
   pendingSubmissions: OperatorPendingSubmission[];
+  operatorContext?: {
+    pendingValidations: number;
+    approvedSubmissions: number;
+    triggerEnabled: boolean;
+    triggerMessage: string;
+    campaignId: number;
+    processingHealth?: string;
+    releaseReadiness?: string;
+  };
 }
 
 export interface OperatorOverviewResult extends ViewResult<OperatorOverviewData> {
   reviewSubmission: (submissionId: number, decision: "approved" | "rejected" | "needs_attestation") => Promise<void>;
+  triggerProcessing: () => Promise<void>;
+  refresh: () => Promise<void>;
   reviewStatus: "idle" | "submitting" | "success" | "error";
   reviewMessage?: string;
+  actionStatus: "idle" | "submitting" | "success" | "error";
+  actionMessage?: string;
 }
 
 export interface AuditorOverviewData {
   metrics: RoleMetric[];
   releaseScope: string[];
   actions: RoleAction[];
+  context: {
+    releaseReady: boolean;
+    packageAvailable: boolean;
+    auditTrailAvailable: boolean;
+    message: string;
+    lastRunId?: number;
+    lastRunStatus?: string;
+    recordLifecycle?: string;
+    recordReference?: string | null;
+  };
 }
 
 export function useDeskOverview(data: OverviewData): ViewResult<OverviewData> {
@@ -53,24 +76,36 @@ export function useOperatorOverview(): OperatorOverviewResult {
   const [result, setResult] = useState<ViewResult<OperatorOverviewData>>({ status: "loading" });
   const [reviewStatus, setReviewStatus] = useState<OperatorOverviewResult["reviewStatus"]>("idle");
   const [reviewMessage, setReviewMessage] = useState<string>();
+  const [actionStatus, setActionStatus] = useState<OperatorOverviewResult["actionStatus"]>("idle");
+  const [actionMessage, setActionMessage] = useState<string>();
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [overview, pendingSubmissions] = await Promise.all([
       getOperatorOverview(),
       getOperatorPendingSubmissions()
     ]);
     const metrics = (overview.metrics ?? []).slice(0, 4);
     const health = (overview.metrics ?? []).slice(4);
+    const operator = overview.overview_sections?.operator ?? {};
     setResult({
       status: "ready",
       data: {
         metrics,
         health,
         actions: overview.actions ?? [],
-        pendingSubmissions
+        pendingSubmissions,
+        operatorContext: {
+          pendingValidations: operator.pending_validations ?? pendingSubmissions.length,
+          approvedSubmissions: operator.approved_submissions ?? 0,
+          triggerEnabled: Boolean(operator.trigger_enabled),
+          triggerMessage: operator.trigger_message ?? "Review submitted contribution packages before triggering benchmark processing.",
+          campaignId: operator.campaign_id ?? 1,
+          processingHealth: operator.processing_health,
+          releaseReadiness: operator.release_readiness
+        }
       }
     });
-  };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +117,7 @@ export function useOperatorOverview(): OperatorOverviewResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
 
   const reviewSubmission = async (
     submissionId: number,
@@ -101,7 +136,28 @@ export function useOperatorOverview(): OperatorOverviewResult {
     }
   };
 
-  return { ...result, reviewSubmission, reviewStatus, reviewMessage };
+  const triggerProcessing = async () => {
+    const context = result.data?.operatorContext;
+    if (!context?.triggerEnabled) {
+      setActionStatus("error");
+      setActionMessage(context?.triggerMessage ?? "Review submitted contribution packages before triggering benchmark processing.");
+      return;
+    }
+
+    setActionStatus("submitting");
+    setActionMessage(undefined);
+    try {
+      const response = await triggerOperatorProcessing(context.campaignId);
+      await load();
+      setActionStatus("success");
+      setActionMessage(response.message);
+    } catch (error) {
+      setActionStatus("error");
+      setActionMessage(error instanceof Error ? error.message : "Processing trigger failed.");
+    }
+  };
+
+  return { ...result, reviewSubmission, triggerProcessing, refresh: load, reviewStatus, reviewMessage, actionStatus, actionMessage };
 }
 
 export function useAuditorOverview(): ViewResult<AuditorOverviewData> {
@@ -112,19 +168,26 @@ export function useAuditorOverview(): ViewResult<AuditorOverviewData> {
 
     getAuditorOverview()
       .then((payload) => {
+        const auditorContext = payload.overview_sections?.auditor ?? {};
         if (!cancelled) {
           setResult({
             status: "ready",
             data: {
               metrics: payload.metrics ?? [],
-              releaseScope: [
-                "Benchmark reliability package",
-                "Cohort-level benchmark metrics",
-                "Institution-scoped comparison output",
-                "Attestation reference",
-                "No raw institutional contribution data"
-              ],
-              actions: payload.actions ?? []
+              releaseScope: auditorContext.release_scope ?? [],
+              actions: payload.actions ?? [],
+              context: {
+                releaseReady: Boolean(auditorContext.release_ready),
+                packageAvailable: Boolean(auditorContext.package_available),
+                auditTrailAvailable: Boolean(auditorContext.audit_trail_available),
+                message:
+                  auditorContext.message ??
+                  "Audit state is loaded from backend evidence and release lifecycle projections.",
+                lastRunId: auditorContext.last_run_id,
+                lastRunStatus: auditorContext.last_run_status,
+                recordLifecycle: auditorContext.record_lifecycle,
+                recordReference: auditorContext.record_reference
+              }
             }
           });
         }

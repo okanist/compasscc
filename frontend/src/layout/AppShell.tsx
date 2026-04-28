@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { InstitutionTopBar, type InstitutionTopBarProps } from "../components/InstitutionTopBar";
+import compassLogo from "../assets/compass-logo.png";
 import type { NavKey } from "../data/types";
-import { roleLabels, type AppRole } from "../types/roles";
+import type { AppRole } from "../types/roles";
 
 type ThemeMode = "night" | "day";
 
@@ -12,6 +13,7 @@ interface AppShellProps {
   onRoleChange: (role: AppRole) => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
+  onResetDemoState: () => Promise<void>;
   topBar: Omit<
     InstitutionTopBarProps,
     "role" | "onRoleChange" | "theme" | "onToggleTheme"
@@ -102,6 +104,48 @@ const navItems: { key: NavKey; label: string; icon: ReactNode }[] = [
   }
 ];
 
+const roleNavLabels: Record<AppRole, Record<NavKey, string>> = {
+  institution_desk: {
+    overview: "Intelligence Overview",
+    campaign: "Contribute Data",
+    processing: "Confidential Processing",
+    benchmark: "Benchmark & Insights",
+    position: "My Position"
+  },
+  operator: {
+    overview: "Operations Overview",
+    campaign: "Contribution Review",
+    processing: "Processing Control",
+    benchmark: "Benchmark Operations",
+    position: "Institution Output Review"
+  },
+  auditor: {
+    overview: "Audit Overview",
+    campaign: "Policy Evidence",
+    processing: "Benchmark Audit",
+    benchmark: "Output Audit",
+    position: "Audit Record"
+  }
+};
+
+const sidebarIdentity: Record<AppRole, { initials: string; name: string; subtitle: string }> = {
+  institution_desk: {
+    initials: "AB",
+    name: "Alpha Bank",
+    subtitle: "Institution Desk"
+  },
+  operator: {
+    initials: "OP",
+    name: "Compass Operator",
+    subtitle: "Operations"
+  },
+  auditor: {
+    initials: "AU",
+    name: "Compass Auditor",
+    subtitle: "Audit Review"
+  }
+};
+
 export function AppShell({
   activeNav,
   onNavigate,
@@ -109,19 +153,34 @@ export function AppShell({
   onRoleChange,
   theme,
   onToggleTheme,
+  onResetDemoState,
   topBar,
   children
 }: AppShellProps) {
+  const identity = sidebarIdentity[role];
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetDemoState = async () => {
+    if (isResetting) {
+      return;
+    }
+
+    setIsResetting(true);
+
+    try {
+      await onResetDemoState();
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
           <div className="brand-lockup">
             <div className="brand-mark" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
+              <img src={compassLogo} alt="" />
             </div>
             <div>
               <span className="eyebrow">Compass</span>
@@ -141,7 +200,7 @@ export function AppShell({
               <span className="nav-item__icon" aria-hidden="true">
                 {item.icon}
               </span>
-              <span>{item.label}</span>
+              <span>{roleNavLabels[role][item.key]}</span>
             </button>
           ))}
         </nav>
@@ -172,13 +231,32 @@ export function AppShell({
                 />
               </svg>
             </button>
+            <button
+              type="button"
+              className="sidebar-utility-button"
+              aria-label={isResetting ? "Resetting demo state" : "Reset demo state"}
+              title={isResetting ? "Resetting demo state" : "Reset demo state"}
+              onClick={handleResetDemoState}
+              disabled={isResetting}
+            >
+              <svg viewBox="0 0 24 24" role="presentation">
+                <path
+                  d="M7.25 8.25A6.25 6.25 0 1 1 6.1 14M7.25 8.25H3.75m3.5 0v-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.55"
+                />
+              </svg>
+            </button>
           </div>
 
           <div className="sidebar-profile">
-            <div className="sidebar-profile__avatar">AB</div>
+            <div className="sidebar-profile__avatar">{identity.initials}</div>
             <div>
-              <strong>Alpha Bank</strong>
-              <span>{roleLabels[role]}</span>
+              <strong>{identity.name}</strong>
+              <span>{identity.subtitle}</span>
             </div>
           </div>
         </div>

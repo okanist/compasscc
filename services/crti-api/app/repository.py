@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
 from .lifecycle import (
@@ -47,7 +47,7 @@ class CompassRepository:
         self.reset()
 
     def reset(self) -> None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self.institutions = {
             1: InstitutionDTO(
                 id=1,
@@ -343,7 +343,7 @@ class CompassRepository:
         return [
             item
             for item in self.submissions.values()
-            if item.review_status in {"submitted", "under_review", "needs_attestation"}
+            if item.review_status in {"submitted", "under_review"}
         ]
 
     def get_attestation_for_run(self, run_id: int = 1) -> AttestationReferenceDTO:
@@ -412,7 +412,7 @@ class CompassRepository:
 
     def create_or_update_submission(self, campaign_id: int, institution_id: int, payload: dict[str, Any]) -> tuple[ContributionSubmissionDTO, bool]:
         latest = self.get_latest_submission_for_institution(campaign_id, institution_id)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         normalized_payload = self._normalized_submission_payload(
             institution_id=institution_id,
             incoming_payload=payload["payload"],
@@ -456,7 +456,7 @@ class CompassRepository:
             update={
                 "review_status": review_status,
                 "policy_status": policy_status or current.policy_status,
-                "updated_at": datetime.utcnow(),
+                "updated_at": datetime.now(timezone.utc),
             }
         )
         self.submissions[submission_id] = updated
@@ -467,7 +467,7 @@ class CompassRepository:
         valid = [item for item in campaign_submissions if item.review_status == SUBMISSION_APPROVED]
         invalid = [item for item in campaign_submissions if item.review_status in {SUBMISSION_REJECTED, SUBMISSION_NEEDS_ATTESTATION}]
         new_id = max(self.runs, default=0) + 1
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         run = ProcessingRunDTO(
             id=new_id,
             campaign_id=campaign_id,
@@ -504,7 +504,7 @@ class CompassRepository:
         updated = current.model_copy(
             update={
                 "run_status": status,
-                "finished_at": datetime.utcnow() if status in {RUN_COMPLETED, "release_pending", RUN_RELEASED} else current.finished_at,
+                "finished_at": datetime.now(timezone.utc) if status in {RUN_COMPLETED, "release_pending", RUN_RELEASED} else current.finished_at,
                 "notes_json": notes,
             }
         )
@@ -552,7 +552,7 @@ class CompassRepository:
                 {"title": "Record benchmark comparison", "body": "Finalize the institution-scoped audit record when ready."},
             ],
             "release_status": RELEASE_DRAFT,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
         }
         if current:
             updated = current.model_copy(update=update)
@@ -581,7 +581,7 @@ class CompassRepository:
                 "included": ["benchmark_delta", "risk_tier", "interpretation_summary"],
                 "excluded": ["raw_peer_contributions", "raw_institution_payload", "desk_recommendation_blocks"],
             },
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             recorded_at=None,
             created_by=created_by,
         )
@@ -594,7 +594,7 @@ class CompassRepository:
             update={
                 "record_status": status,
                 "canton_record_ref": canton_ref,
-                "recorded_at": datetime.utcnow() if status == RECORD_FINALIZED and current.recorded_at is None else current.recorded_at,
+                "recorded_at": datetime.now(timezone.utc) if status == RECORD_FINALIZED and current.recorded_at is None else current.recorded_at,
             }
         )
         self.audit_records[record_id] = updated

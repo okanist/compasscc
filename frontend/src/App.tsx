@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRole } from "./context/role-context";
-import { loadCompassData } from "./data/api";
+import { loadCompassData, resetDemoState } from "./data/api";
 import { fallbackData } from "./data/fallback";
 import type { ApiPayload, NavKey } from "./data/types";
 import { AppShell } from "./layout/AppShell";
@@ -117,36 +117,36 @@ const topBarContent: Record<AppRole, Record<NavKey, TopBarContent>> = {
       title: "Compass Audit Review",
       description:
         "Review reliability, attestation coverage, release scope, retention compliance, and audit trail status across the benchmark cycle.",
-      primaryActionLabel: "View Audit Package",
-      secondaryActionLabel: "View Audit Trail"
+      primaryActionLabel: "View Audit Trail",
+      secondaryActionLabel: "View Audit Package"
     },
     campaign: {
-      title: "Contribution Policy Audit",
+      title: "Policy Evidence",
       description:
-        "Inspect contribution policy, accepted submission classes, attestation rules, retention controls, and enforcement state.",
+        "Inspect contribution policy status, accepted submission classes, attestation rules, retention controls, and enforcement evidence.",
       primaryActionLabel: "Open Evidence Package",
       secondaryActionLabel: "View Audit Trail"
     },
     processing: {
-      title: "Processing Evidence Review",
+      title: "Benchmark Release Audit",
       description:
-        "Review runtime guarantees, attestation chain, disclosure boundary, retention enforcement, and evidence references.",
+        "Review released benchmark snapshot, construction quality, processing evidence, retention boundary, and release scope.",
       primaryActionLabel: "Open Evidence Package",
       secondaryActionLabel: "View Audit Trail"
     },
     benchmark: {
-      title: "Benchmark Audit Review",
+      title: "Institution Output Audit",
       description:
-        "Inspect methodology, reliability, attested coverage, released output scope, and benchmark audit notes.",
-      primaryActionLabel: "View Audit Package",
+        "Inspect institution-scoped derived output, release eligibility, record lifecycle, and audit-safe handoff state.",
+      primaryActionLabel: "Open Output Evidence Package",
       secondaryActionLabel: "View Audit Trail"
     },
     position: {
-      title: "Institution Output Audit",
+      title: "Audit Record",
       description:
-        "Audit institution-scoped released output, attestation-linked summaries, included and excluded scope, record references, and trail events.",
-      primaryActionLabel: "Open Evidence Package",
-      secondaryActionLabel: "View Audit Trail"
+        "Review finalized Canton-style audit record references, lifecycle state, and read-only audit trail events.",
+      primaryActionLabel: "Open Record Package",
+      secondaryActionLabel: "Back to Audit Overview"
     }
   }
 };
@@ -158,6 +158,7 @@ export default function App() {
   const [theme, setTheme] = useState<ThemeMode>("night");
   const [contributionActionLabel, setContributionActionLabel] = useState("Submit Contribution");
   const [processingActionLabel, setProcessingActionLabel] = useState("Submit Contribution");
+  const [resetVersion, setResetVersion] = useState(0);
   const activeTopBar = topBarContent[role][activeNav];
   const toggleTheme = () => setTheme((currentTheme) => (currentTheme === "night" ? "day" : "night"));
 
@@ -189,7 +190,112 @@ export default function App() {
       return;
     }
 
+    if (role === "institution_desk" && activeNav === "benchmark") {
+      handleNavigate("position");
+      return;
+    }
+
+    if (role === "institution_desk" && activeNav === "position") {
+      window.dispatchEvent(new CustomEvent("compass:position-primary-action"));
+      return;
+    }
+
+    if (role === "operator" && activeNav === "overview") {
+      if (label === "Trigger Benchmark Run") {
+        window.dispatchEvent(new CustomEvent("compass:operator-trigger-processing"));
+        return;
+      }
+
+      if (label === "Review Submission") {
+        window.dispatchEvent(new CustomEvent("compass:operator-review-submissions"));
+        return;
+      }
+    }
+
+    if (role === "operator" && activeNav === "campaign") {
+      if (label === "Review Submission") {
+        window.dispatchEvent(new CustomEvent("compass:operator-contribution-review"));
+        return;
+      }
+
+      if (label === "Approve Release") {
+        window.dispatchEvent(new CustomEvent("compass:operator-contribution-approve-release"));
+        return;
+      }
+    }
+
+    if (role === "operator" && activeNav === "processing") {
+      if (label === "Trigger Benchmark Run") {
+        window.dispatchEvent(new CustomEvent("compass:operator-processing-trigger"));
+        return;
+      }
+
+      if (label === "Approve Release") {
+        window.dispatchEvent(new CustomEvent("compass:operator-processing-approve-release"));
+        return;
+      }
+    }
+
+    if (role === "operator" && activeNav === "benchmark") {
+      if (label === "Trigger Benchmark Run") {
+        window.dispatchEvent(new CustomEvent("compass:operator-benchmark-trigger"));
+        return;
+      }
+
+      if (label === "Approve Release") {
+        window.dispatchEvent(new CustomEvent("compass:operator-benchmark-approve-release"));
+        return;
+      }
+    }
+
+    if (role === "auditor") {
+      if (activeNav === "position" && label === "Back to Audit Overview") {
+        handleNavigate("overview");
+        return;
+      }
+
+      if (activeNav === "position" && (label === "Open Record Package" || label === "Open Evidence Package")) {
+        window.dispatchEvent(new CustomEvent("compass:auditor-open-record-package"));
+        return;
+      }
+
+      if (label === "View Audit Trail") {
+        handleNavigate("position");
+        return;
+      }
+
+      if (activeNav === "campaign" && label === "Open Evidence Package") {
+        window.dispatchEvent(new CustomEvent("compass:auditor-open-policy-evidence"));
+        return;
+      }
+
+      if (activeNav === "processing" && (label === "Open Evidence Package" || label === "View Audit Package")) {
+        window.dispatchEvent(new CustomEvent("compass:auditor-open-benchmark-evidence"));
+        return;
+      }
+
+      if (activeNav === "benchmark" && (label === "Open Output Evidence Package" || label === "Open Evidence Package" || label === "View Audit Package")) {
+        window.dispatchEvent(new CustomEvent("compass:auditor-open-output-evidence"));
+        return;
+      }
+
+      if (label === "View Audit Package" || label === "Open Evidence Package") {
+        handleNavigate(activeNav === "benchmark" ? "benchmark" : "processing");
+        return;
+      }
+    }
+
     console.info(`[Compass] ${label}`);
+  };
+
+  const handleResetDemoState = async () => {
+    await resetDemoState();
+    const freshData = await loadCompassData();
+
+    setData(freshData);
+    setContributionActionLabel("Submit Contribution");
+    setProcessingActionLabel("Submit Contribution");
+    setResetVersion((version) => version + 1);
   };
 
   useEffect(() => {
@@ -242,16 +348,16 @@ export default function App() {
     return () => window.removeEventListener("compass:processing-action-label", handleProcessingLabel);
   }, []);
 
-  let page = <OverviewPage data={data.overview} role={role} onNavigate={handleNavigate} />;
+  let page = <OverviewPage key={resetVersion} data={data.overview} role={role} onNavigate={handleNavigate} />;
 
   if (activeNav === "campaign") {
-    page = <ContributionPage data={data.campaigns[0]} role={role} />;
+    page = <ContributionPage key={resetVersion} data={data.campaigns[0]} role={role} onNavigate={handleNavigate} />;
   } else if (activeNav === "processing") {
-    page = <ProcessingPage data={data.processing} role={role} onNavigate={handleNavigate} />;
+    page = <ProcessingPage key={resetVersion} data={data.processing} role={role} onNavigate={handleNavigate} />;
   } else if (activeNav === "benchmark") {
-    page = <BenchmarkPage data={data.benchmark} role={role} />;
+    page = <BenchmarkPage key={resetVersion} data={data.benchmark} role={role} onNavigate={handleNavigate} />;
   } else if (activeNav === "position") {
-    page = <PositionPage data={data.position} role={role} />;
+    page = <PositionPage key={resetVersion} data={data.position} role={role} onNavigate={handleNavigate} />;
   }
 
   return (
@@ -262,6 +368,7 @@ export default function App() {
       onRoleChange={setRole}
       theme={theme}
       onToggleTheme={toggleTheme}
+      onResetDemoState={handleResetDemoState}
       topBar={{
         ...activeTopBar,
         primaryActionLabel:

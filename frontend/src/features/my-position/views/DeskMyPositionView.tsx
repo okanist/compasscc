@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react";
 import { SectionCard } from "../../../components/SectionCard";
 import { ViewState } from "../../../components/primitives/ViewState";
-import type { PositionData } from "../../../data/types";
+import type { NavKey, PositionData } from "../../../data/types";
 import { useDeskMyPosition } from "../hooks";
 
 interface DeskMyPositionViewProps {
   data: PositionData;
+  onNavigate: (key: NavKey) => void;
 }
 
 const featuredOutputs = [
@@ -24,18 +26,6 @@ const metricOrder = [
   "Maturity Bucket"
 ];
 
-const interpretationLines = [
-  "Liquidity score remains below cohort median.",
-  "Collateral concentration reduces flexibility under stress.",
-  "Confidence remains high due to attested benchmark reliability."
-];
-
-const explanationPoints = [
-  "Computed from trust-weighted benchmark comparison",
-  "Explanation layer restates derived outputs only",
-  "Suitable for audit handoff and internal review"
-];
-
 const defaultRecommendedActions = [
   {
     title: "Review collateral concentration",
@@ -51,35 +41,92 @@ const defaultRecommendedActions = [
   }
 ];
 
-const defaultAuditItems = [
-  "Benchmark snapshot reference available",
-  "Institution-scoped output package ready",
-  "Attestation-linked summary available",
-  "Record to Canton action"
-];
-
-export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProps) {
+export function DeskMyPositionView({ data: initialData, onNavigate }: DeskMyPositionViewProps) {
   const result = useDeskMyPosition(initialData);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const data = result.data ?? initialData;
+  const outputReady = Boolean(data.context?.outputReady);
+  const alreadyRecorded = data.recordStatus === "finalized";
+  const recordable = Boolean(data.context?.recordable && data.outputId && !alreadyRecorded);
+
+  const openRecordConfirmation = () => {
+    if (!outputReady) {
+      onNavigate("benchmark");
+      return;
+    }
+
+    if (!recordable) {
+      return;
+    }
+
+    setConfirmOpen(true);
+  };
+
+  useEffect(() => {
+    const handleTopBarAction = () => openRecordConfirmation();
+
+    window.addEventListener("compass:position-primary-action", handleTopBarAction);
+    return () => window.removeEventListener("compass:position-primary-action", handleTopBarAction);
+  }, [outputReady, recordable, data.outputId]);
 
   if (result.status !== "ready" || !result.data) {
     return <ViewState result={result} title="Institution Desk Position">{() => null}</ViewState>;
   }
 
-  const data = result.data;
+  if (!outputReady) {
+    return (
+      <div className="page-grid position-page">
+        <SectionCard
+          title="Institution Position Output Is Not Ready Yet"
+          subtitle="Alpha Bank's institution-scoped comparison becomes available after contribution submission and benchmark readiness."
+        >
+          <div className="role-state-panel">
+            {data.context?.notReadyMessage ??
+              "The contribution package must be submitted and benchmark intelligence must be ready before this scoped comparison is released."}
+          </div>
+          <div className="processing-action-row">
+            <button type="button" className="record-button" onClick={() => onNavigate("campaign")}>
+              View Contribution Package
+            </button>
+            <button type="button" className="record-button" onClick={() => onNavigate("processing")}>
+              View Processing Status
+            </button>
+            <button type="button" className="record-button" onClick={() => onNavigate("benchmark")}>
+              View Benchmark Intelligence
+            </button>
+            <button type="button" className="record-button" onClick={() => void result.refresh()}>
+              Refresh Status
+            </button>
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
+
   const metricMap = new Map(data.metrics.map((metric) => [metric.label, metric.value]));
   const recommendedActions = data.recommendedActions?.length ? data.recommendedActions : defaultRecommendedActions;
-  const auditItems = data.auditHandoff?.length ? data.auditHandoff : defaultAuditItems;
   const recordLabel =
     result.recordStatus === "recording"
       ? "Recording..."
-      : data.recordStatus === "finalized"
+      : alreadyRecorded
         ? "Recorded to Canton"
         : "Record to Canton";
+  const handleConfirmRecord = async () => {
+    await result.record();
+    setConfirmOpen(false);
+  };
 
   return (
     <div className="page-grid position-page">
       <SectionCard title="Institution Signal Summary">
         <div className="position-signal-card">
+          <div className="position-context-strip">
+            <span>Institution-scoped comparison</span>
+            <span>{data.context?.institutionName ?? "Alpha Bank"}</span>
+            <span>{data.context?.selectedScenario ?? "Active scenario"}</span>
+            <span>{data.context?.benchmarkReference ?? "Benchmark reference pending"}</span>
+          </div>
           <p className="position-signal-card__lead">
             {data.suggestedInterpretation}
           </p>
@@ -153,7 +200,11 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
         <div className="position-interpretation-card">
           <p>{data.suggestedInterpretation}</p>
           <div className="position-interpretation-lines">
-            {interpretationLines.map((line, index) => (
+            {[
+              `Alpha Bank score: ${metricMap.get("My Liquidity Score") ?? "N/A"}`,
+              `Cohort benchmark: ${metricMap.get("Network Average") ?? "N/A"}`,
+              `Risk tier: ${metricMap.get("Risk Tier") ?? "N/A"}`
+            ].map((line, index) => (
               <span
                 key={line}
                 className={index === 0 ? "position-interpretation-line--primary" : undefined}
@@ -169,7 +220,11 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
         <div className="position-explain-card">
           <p>{data.explainableSummary}</p>
           <div className="position-explain-grid">
-            {explanationPoints.map((point) => (
+            {[
+              data.context?.privacySummary ?? "Outputs are derived from anonymized benchmark computation and Alpha Bank's scoped comparison package.",
+              "Raw Alpha Bank contribution fields and raw peer positions are not shown.",
+              "Canton-style recording captures the institution-scoped output lifecycle."
+            ].map((point) => (
               <span key={point}>{point}</span>
             ))}
           </div>
@@ -192,19 +247,31 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
         subtitle="Institution-scoped comparison package is ready for audit-linked recording and internal review."
       >
         <div className="position-audit-panel">
-          <div className="position-audit-list">
-            {auditItems.map((item) => (
-              <span key={item} className={item.includes("Record") ? "position-audit-item--action" : undefined}>
-                {item}
-              </span>
-            ))}
-            {data.cantonRecordRef ? <span className="position-audit-item--action">{data.cantonRecordRef}</span> : null}
+          <div className="position-audit-summary">
+            <div className="position-audit-status">
+              <span className="eyebrow">Record Lifecycle</span>
+              <strong>{data.recordStatus ?? "draft"}</strong>
+              <p>{data.cantonRecordRef ? "Canton-style record reference finalized." : "Ready for simulated Canton recording."}</p>
+            </div>
+            <div className="position-audit-details">
+              <span>Benchmark snapshot reference available</span>
+              <span>Institution-scoped output package ready</span>
+              <span>Attestation-linked summary available</span>
+              <span>Raw data exposure: none</span>
+            </div>
+            {data.cantonRecordRef ? (
+              <div className="position-audit-reference">
+                <span className="eyebrow">Canton-style record reference</span>
+                <strong>{data.cantonRecordRef}</strong>
+                {data.context?.recordedAt ? <p>Finalized at {data.context.recordedAt}</p> : null}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
             className="record-button position-audit-button"
-            onClick={() => void result.record()}
-            disabled={result.recordStatus === "recording" || data.recordStatus === "finalized"}
+            onClick={openRecordConfirmation}
+            disabled={result.recordStatus === "recording" || !recordable}
           >
             {recordLabel}
           </button>
@@ -213,14 +280,69 @@ export function DeskMyPositionView({ data: initialData }: DeskMyPositionViewProp
           <div
             className={
               result.recordStatus === "error"
-                ? "role-state-panel role-state-panel--error"
-                : "role-state-panel"
+                ? "position-audit-message position-audit-message--error"
+                : "position-audit-message"
             }
           >
             {result.recordMessage}
+            {data.cantonRecordRef ? ` Reference: ${data.cantonRecordRef}` : ""}
           </div>
         ) : null}
       </SectionCard>
+
+      {confirmOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="confirmation-modal panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="position-record-title"
+          >
+            <div className="confirmation-modal__header">
+              <span className="eyebrow">Record to Canton</span>
+              <h3 id="position-record-title">Confirm Institution-Scoped Record</h3>
+              <p>
+                This creates a Canton-style record reference for the derived Alpha Bank comparison output.
+                Raw contribution values remain outside the record.
+              </p>
+            </div>
+            <div className="confirmation-summary">
+              <div>
+                <span>Institution</span>
+                <strong>{data.context?.institutionName ?? "Alpha Bank"}</strong>
+              </div>
+              <div>
+                <span>Scenario</span>
+                <strong>{data.context?.selectedScenario ?? "Active scenario"}</strong>
+              </div>
+              <div>
+                <span>Benchmark Reference</span>
+                <strong>{data.context?.benchmarkReference ?? "Pending"}</strong>
+              </div>
+              <div>
+                <span>Output ID</span>
+                <strong>{data.outputId ?? "Pending"}</strong>
+              </div>
+              <div>
+                <span>Record Lifecycle</span>
+                <strong>{data.recordStatus ?? "draft"}</strong>
+              </div>
+              <div>
+                <span>Raw Data Exposure</span>
+                <strong>None</strong>
+              </div>
+            </div>
+            <div className="confirmation-modal__actions">
+              <button type="button" className="secondary-button" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="record-button" onClick={() => void handleConfirmRecord()} disabled={result.recordStatus === "recording"}>
+                {result.recordStatus === "recording" ? "Recording..." : "Record to Canton"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

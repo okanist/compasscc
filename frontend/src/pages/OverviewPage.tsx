@@ -17,7 +17,7 @@ export function OverviewPage({ data, role, onNavigate }: OverviewPageProps) {
   }
 
   if (role === "auditor") {
-    return <AuditorOverviewView />;
+    return <AuditorOverviewView onNavigate={onNavigate} />;
   }
 
   return <DeskOverviewView data={data} onNavigate={onNavigate} />;

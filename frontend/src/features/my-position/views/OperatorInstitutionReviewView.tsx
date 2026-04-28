@@ -1,9 +1,10 @@
 import { SectionCard } from "../../../components/SectionCard";
-import { RoleActionGrid, RoleListSection, RoleMetricGrid } from "../../../components/primitives/RoleViewSections";
+import { RoleListSection, RoleMetricGrid } from "../../../components/primitives/RoleViewSections";
 import { ViewState } from "../../../components/primitives/ViewState";
+import type { NavKey } from "../../../data/types";
 import { useOperatorInstitutionReview } from "../hooks";
 
-export function OperatorInstitutionReviewView() {
+export function OperatorInstitutionReviewView({ onNavigate }: { onNavigate: (key: NavKey) => void }) {
   const result = useOperatorInstitutionReview();
 
   return (
@@ -14,11 +15,24 @@ export function OperatorInstitutionReviewView() {
             <RoleMetricGrid metrics={data.metrics} />
           </SectionCard>
           <SectionCard title="Output Summary">
-            <div className="role-state-panel">{data.summary}</div>
+            <div className="role-state-panel">
+              {data.summary}
+              {data.context?.privacySummary ? ` ${data.context.privacySummary}` : ""}
+            </div>
           </SectionCard>
           <RoleListSection title="Handoff Readiness" items={data.handoff} />
           <SectionCard title="Operator Actions">
-            <RoleActionGrid actions={data.actions} />
+            <div className="operator-control-row">
+              <button type="button" className="record-button" onClick={() => onNavigate("processing")}>
+                Back to Processing
+              </button>
+              <button type="button" className="record-button" onClick={() => onNavigate("benchmark")}>
+                Back to Benchmark Operations
+              </button>
+              <button type="button" className="record-button" onClick={() => onNavigate("campaign")}>
+                Review Submission Queue
+              </button>
+            </div>
           </SectionCard>
         </div>
       )}

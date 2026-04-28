@@ -13,11 +13,11 @@ interface ProcessingPageProps {
 
 export function ProcessingPage({ data, role, onNavigate }: ProcessingPageProps) {
   if (role === "operator") {
-    return <OperatorProcessingView />;
+    return <OperatorProcessingView onNavigate={onNavigate} />;
   }
 
   if (role === "auditor") {
-    return <AuditorProcessingView />;
+    return <AuditorProcessingView onNavigate={onNavigate} />;
   }
 
   return <DeskProcessingView data={data} onNavigate={onNavigate} />;

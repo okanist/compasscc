@@ -53,7 +53,7 @@ class NoopLedgerCommandAdapter:
         return self._ref("create_institution_output", output_id)
 
     def finalize_audit_record(self, record_id: int) -> LedgerCommandRef:
-        return self._ref("finalize_audit_record", record_id)
+        return LedgerCommandRef(command="finalize_audit_record", ref=f"CANTON-REC-{record_id:04d}")
 
 
 class LedgerEventIngestor(Protocol):

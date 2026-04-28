@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -17,7 +17,7 @@ class Institution(Base):
     party_name: Mapped[str] = mapped_column(String(240), index=True)
     institution_type: Mapped[str] = mapped_column(String(80))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Campaign(Base):
@@ -35,7 +35,7 @@ class Campaign(Base):
     submission_window_start: Mapped[datetime] = mapped_column(DateTime)
     submission_window_end: Mapped[datetime] = mapped_column(DateTime)
     created_by: Mapped[str] = mapped_column(String(240))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class ContributionSubmission(Base):
@@ -50,8 +50,8 @@ class ContributionSubmission(Base):
     policy_status: Mapped[str] = mapped_column(String(80), index=True)
     review_status: Mapped[str] = mapped_column(String(80), index=True)
     attestation_status: Mapped[str] = mapped_column(String(80), index=True)
-    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class ProcessingRun(Base):
@@ -90,7 +90,7 @@ class BenchmarkSnapshot(Base):
     secondary_metrics_json: Mapped[dict] = mapped_column(JSON)
     alerts_json: Mapped[list[str]] = mapped_column(JSON)
     distribution_json: Mapped[dict] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class InstitutionOutput(Base):
@@ -111,7 +111,7 @@ class InstitutionOutput(Base):
     explainable_summary: Mapped[str] = mapped_column(Text)
     recommended_actions_json: Mapped[list[dict]] = mapped_column(JSON)
     release_status: Mapped[str] = mapped_column(String(80), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class AttestationReference(Base):
@@ -121,7 +121,7 @@ class AttestationReference(Base):
     processing_run_id: Mapped[int] = mapped_column(ForeignKey("processing_runs.id"), index=True)
     ref_code: Mapped[str] = mapped_column(String(180), unique=True, index=True)
     attestation_type: Mapped[str] = mapped_column(String(80))
-    issued_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    issued_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     issuer: Mapped[str] = mapped_column(String(180))
     metadata_json: Mapped[dict] = mapped_column(JSON)
 
