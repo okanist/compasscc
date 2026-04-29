@@ -99,10 +99,12 @@ class DeskViewService(BaseViewService):
         return package, policy
 
     def get_overview(self, institution_id: int = 1):
-        snapshot = self.repo.get_snapshot()
-        output = self.repo.get_output_for_institution(institution_id, snapshot.id)
         campaign = self.repo.get_active_campaign()
-        latest_run = self.repo.get_latest_run_for_campaign(campaign.id if campaign else snapshot.campaign_id)
+        campaign_id = campaign.id if campaign else 1
+        campaign_snapshots = [item for item in self.repo.snapshots.values() if item.campaign_id == campaign_id]
+        snapshot = min(campaign_snapshots, key=lambda item: item.id) if campaign_snapshots else self.repo.get_snapshot()
+        output = self.repo.get_output_for_institution(institution_id, snapshot.id)
+        latest_run = self.repo.get_latest_run_for_campaign(campaign_id)
         submission = next(
             (
                 item
@@ -418,10 +420,12 @@ class DeskViewService(BaseViewService):
 
 class OperatorViewService(BaseViewService):
     def get_overview(self):
-        snapshot = self.repo.get_snapshot()
+        campaign_id = 1
+        campaign_snapshots = [item for item in self.repo.snapshots.values() if item.campaign_id == campaign_id]
+        snapshot = min(campaign_snapshots, key=lambda item: item.id) if campaign_snapshots else self.repo.get_snapshot()
         pending = self.repo.list_pending_operator_submissions()
-        latest_run = self.repo.get_latest_run_for_campaign(1)
-        approved = self.repo.list_submissions(campaign_id=1, review_status="approved")
+        latest_run = self.repo.get_latest_run_for_campaign(campaign_id)
+        approved = self.repo.list_submissions(campaign_id=campaign_id, review_status="approved")
         trigger_enabled = len(pending) == 0 and len(approved) > 0 and latest_run.run_status == "not_started"
         trigger_message = (
             "Ready to trigger benchmark processing."
@@ -452,10 +456,16 @@ class OperatorViewService(BaseViewService):
                     "approved_submissions": len(approved),
                     "trigger_enabled": trigger_enabled,
                     "trigger_message": trigger_message,
-                    "campaign_id": 1,
+                    "campaign_id": campaign_id,
                     "latest_run_id": latest_run.id,
                     "processing_health": latest_run.run_status,
                     "release_readiness": str(latest_run.notes_json.get("release_readiness", "draft")),
+                    "processing_context": {
+                        "input_count": latest_run.input_count,
+                        "valid_inputs": latest_run.valid_submission_count,
+                        "invalid_inputs": latest_run.invalid_submission_count,
+                        "run_status": latest_run.run_status,
+                    },
                 }
             },
         )
@@ -470,7 +480,9 @@ class OperatorViewService(BaseViewService):
         )
 
     def get_processing_view(self, run_id: int):
-        run = self.repo.get_run(run_id)
+        requested_run = self.repo.get_run(run_id)
+        latest_run = self.repo.get_latest_run_for_campaign(requested_run.campaign_id)
+        run = latest_run if latest_run.id > requested_run.id else requested_run
         campaign = self.repo.get_campaign(run.campaign_id)
         pending = self.repo.list_pending_operator_submissions()
         approved = self.repo.list_submissions(campaign_id=run.campaign_id, review_status="approved")
@@ -534,7 +546,7 @@ class OperatorViewService(BaseViewService):
             "lifecycle": lifecycle,
         }
         return self.projections.processing_projection(
-            run_id,
+            run.id,
             [
                 ActionDTO(title="Trigger Benchmark Run", body=context["trigger_message"]),
                 ActionDTO(title="Approve Release", body=context["approve_release_message"]),
@@ -588,12 +600,53 @@ class OperatorViewService(BaseViewService):
 
 
 class AuditorViewService(BaseViewService):
-    def get_overview(self):
-        snapshot = self.repo.get_snapshot()
-        latest_run = self.repo.get_latest_run_for_campaign(snapshot.campaign_id)
-        latest_record = max(self.repo.audit_records.values(), key=lambda item: item.id, default=None)
+    def _latest_auditor_context(self, campaign_id: int | None = None, institution_id: int = 1) -> dict:
+        campaign = self.repo.get_campaign(campaign_id) if campaign_id else self.repo.get_active_campaign()
+        resolved_campaign_id = campaign.id if campaign else 1
+        campaign_snapshots = [
+            item for item in self.repo.snapshots.values() if item.campaign_id == resolved_campaign_id
+        ]
+        summary_snapshot = min(campaign_snapshots, key=lambda item: item.id) if campaign_snapshots else self.repo.get_snapshot()
+        latest_snapshot = max(campaign_snapshots, key=lambda item: item.id) if campaign_snapshots else summary_snapshot
+        latest_run = self.repo.get_latest_run_for_campaign(resolved_campaign_id)
         release_status = str(latest_run.notes_json.get("release_status", "draft"))
         release_ready = latest_run.run_status == "released" or release_status in {"approved", "published"}
+        release_pending = latest_run.run_status == "release_pending" or release_status == "release_pending"
+        latest_output = self.repo.get_output_for_institution(institution_id)
+        latest_output_run = self.repo.get_run(latest_output.processing_run_id)
+        latest_output_release_status = str(latest_output_run.notes_json.get("release_status", "draft"))
+        latest_output_released = (
+            latest_output.release_status in {"approved", "published"}
+            and (latest_output_run.run_status == "released" or latest_output_release_status in {"approved", "published"})
+        )
+        latest_output_record = self.repo.get_audit_record_for_output(latest_output.id) if latest_output_released else None
+        finalized_record = (
+            latest_output_record
+            if latest_output_record and latest_output_record.record_status == "finalized"
+            else None
+        )
+        attestation = None if latest_run.run_status == "not_started" else self.repo.get_attestation_for_run(latest_run.id)
+        return {
+            "campaign": campaign,
+            "campaign_id": resolved_campaign_id,
+            "summary_snapshot": summary_snapshot,
+            "latest_snapshot": latest_snapshot,
+            "latest_run": latest_run,
+            "release_status": release_status,
+            "release_ready": release_ready,
+            "release_pending": release_pending,
+            "latest_output": latest_output,
+            "latest_output_record": latest_output_record,
+            "latest_record": finalized_record,
+            "attestation": attestation,
+        }
+
+    def get_overview(self):
+        context = self._latest_auditor_context()
+        snapshot = context["summary_snapshot"]
+        latest_run = context["latest_run"]
+        latest_record = context["latest_record"]
+        release_ready = context["release_ready"]
         finalized_record_available = bool(latest_record and latest_record.record_status == "finalized")
         release_scope = [
             "Benchmark reliability package",
@@ -605,15 +658,19 @@ class AuditorViewService(BaseViewService):
 
         if release_ready:
             metrics = [
-                MetricDTO(label="Benchmark Reliability", value=f"{snapshot.reliability_score:.1f}%", detail="Released benchmark reliability"),
-                MetricDTO(label="Attestation Coverage", value=pct(snapshot.attested_coverage), detail="Released benchmark attestation coverage"),
+                MetricDTO(label="Benchmark Reliability", value=f"{snapshot.reliability_score:.1f}%", detail="Campaign benchmark reliability"),
+                MetricDTO(label="Attestation Coverage", value=pct(snapshot.attested_coverage), detail="Campaign benchmark attestation coverage"),
                 MetricDTO(label="Release Scope", value="Derived outputs only", detail="Raw institution and peer payloads excluded"),
                 MetricDTO(label="Retention Compliance", value="Enforced", detail="No raw payload retention outside the confidential boundary"),
                 MetricDTO(label="Audit Trail Status", value="Current" if finalized_record_available else "Release available", detail="Read-only audit trail available"),
-                MetricDTO(label="Last Recorded Run", value=f"Run {latest_run.id} / Released", detail=latest_run.finished_at.isoformat() if latest_run.finished_at else "Release approved"),
+                MetricDTO(
+                    label="Last Recorded Run",
+                    value=f"Run {latest_run.id} / {latest_run.run_status.replace('_', ' ').title()}",
+                    detail=latest_run.finished_at.isoformat() if latest_run.finished_at else "Latest processing run metadata",
+                ),
                 MetricDTO(
                     label="Record Lifecycle",
-                    value=latest_record.record_status.replace("_", " ").title() if latest_record else "Draft",
+                    value=latest_record.record_status.replace("_", " ").title() if latest_record else "Not Finalized",
                     detail=(latest_record.canton_record_ref if latest_record and latest_record.canton_record_ref else "Canton-style reference pending"),
                 ),
             ]
@@ -654,6 +711,13 @@ class AuditorViewService(BaseViewService):
                     ],
                     "last_run_id": latest_run.id,
                     "last_run_status": latest_run.run_status,
+                    "latest_run_evidence": {
+                        "run_id": latest_run.id,
+                        "run_status": latest_run.run_status,
+                        "input_count": latest_run.input_count,
+                        "valid_inputs": latest_run.valid_submission_count,
+                        "invalid_inputs": latest_run.invalid_submission_count,
+                    },
                     "record_lifecycle": latest_record.record_status if latest_record and release_ready else "not_finalized",
                     "record_reference": latest_record.canton_record_ref if latest_record and release_ready else None,
                 }
@@ -661,13 +725,12 @@ class AuditorViewService(BaseViewService):
         )
 
     def get_policy_review(self, campaign_id: int):
+        context = self._latest_auditor_context(campaign_id)
         campaign = self.repo.get_campaign(campaign_id)
         submissions = self.repo.list_submissions(campaign_id=campaign_id)
-        latest_run = self.repo.get_latest_run_for_campaign(campaign_id)
         pending = [item for item in submissions if item.review_status in {"submitted", "under_review"}]
-        release_status = str(latest_run.notes_json.get("release_status", "draft"))
-        released = latest_run.run_status == "released" or release_status in {"approved", "published"}
-        finalized_record = next((item for item in self.repo.audit_records.values() if item.record_status == "finalized"), None)
+        released = context["release_ready"]
+        latest_record = context["latest_record"]
         policy = {
             "policy_status": "Active",
             "accepted_submission_classes": [
@@ -711,8 +774,10 @@ class AuditorViewService(BaseViewService):
                 "pending_reviews": len(pending),
                 "submitted_packages": len(submissions),
                 "released_cycle": released,
-                "record_lifecycle": finalized_record.record_status if finalized_record else "not_finalized",
-                "record_reference": finalized_record.canton_record_ref if finalized_record else None,
+                "record_lifecycle": latest_record.record_status if latest_record and released else "not_finalized",
+                "record_reference": latest_record.canton_record_ref if latest_record and released else None,
+                "latest_run_id": context["latest_run"].id,
+                "attestation_reference": context["attestation"].ref_code if context["attestation"] else None,
                 "message": (
                     "Policy evidence is enforced for the released benchmark cycle."
                     if released
@@ -731,8 +796,11 @@ class AuditorViewService(BaseViewService):
         )
 
     def get_processing_evidence(self, run_id: int):
+        requested_run = self.repo.get_run(run_id)
+        latest_run = self.repo.get_latest_run_for_campaign(requested_run.campaign_id)
+        run = latest_run if latest_run.id > requested_run.id else requested_run
         return self.projections.processing_projection(
-            run_id,
+            run.id,
             [
                 ActionDTO(title="Open Evidence Package", body="Inspect attestation and retention evidence."),
                 ActionDTO(title="View Audit Trail", body="Open run lifecycle events."),
@@ -740,29 +808,19 @@ class AuditorViewService(BaseViewService):
         )
 
     def get_benchmark_audit_view(self, snapshot_id: int):
+        context = self._latest_auditor_context()
         requested_snapshot = self.repo.get_snapshot(snapshot_id)
-        latest_snapshot = self.repo.get_latest_snapshot_for_campaign(requested_snapshot.campaign_id)
-        snapshot = latest_snapshot if latest_snapshot.id > requested_snapshot.id else requested_snapshot
-        run = self.repo.get_run(snapshot.processing_run_id)
-        release_status = str(run.notes_json.get("release_status", "draft"))
-        release_ready = run.run_status == "released" or release_status in {"approved", "published"}
-        release_pending = run.run_status == "release_pending" or release_status == "release_pending"
-        attestation = None if run.run_status == "not_started" else self.repo.get_attestation_for_run(run.id)
-        output = next((item for item in self.repo.outputs.values() if item.benchmark_snapshot_id == snapshot.id), None)
-        audit_record = next(
-            (
-                item
-                for item in self.repo.audit_records.values()
-                if item.benchmark_snapshot_id == snapshot.id and item.record_status == "finalized"
-            ),
-            None,
-        )
-        if audit_record is None and output:
-            audit_record = self.repo.get_audit_record_for_output(output.id)
-        submitted = self.repo.list_submissions(campaign_id=snapshot.campaign_id)
+        summary_snapshot = context["summary_snapshot"]
+        latest_snapshot = context["latest_snapshot"]
+        run = context["latest_run"]
+        release_ready = context["release_ready"]
+        release_pending = context["release_pending"]
+        attestation = context["attestation"]
+        audit_record = context["latest_record"] or context["latest_output_record"]
+        submitted = self.repo.list_submissions(campaign_id=context["campaign_id"])
         approved = [item for item in submitted if item.review_status == "approved"]
         return self.projections.benchmark_projection(
-            snapshot.scenario,
+            summary_snapshot.scenario,
             [
                 ActionDTO(title="Open Evidence Package", body="Inspect benchmark and processing evidence without raw contribution payloads."),
                 ActionDTO(title="View Audit Trail", body="Review the read-only audit record and release trail."),
@@ -770,10 +828,11 @@ class AuditorViewService(BaseViewService):
             ],
             benchmark_context={
                 "requested_snapshot_id": requested_snapshot.id,
-                "snapshot_id": snapshot.id if release_ready or release_pending else None,
+                "snapshot_id": latest_snapshot.id if release_ready or release_pending else None,
+                "summary_snapshot_id": summary_snapshot.id,
                 "run_id": run.id,
-                "campaign_id": snapshot.campaign_id,
-                "scenario": snapshot.scenario,
+                "campaign_id": context["campaign_id"],
+                "scenario": summary_snapshot.scenario,
                 "release_status": "approved" if release_ready else "release_pending" if release_pending else "draft",
                 "release_readiness": str(run.notes_json.get("release_readiness", "draft")),
                 "released": release_ready,
@@ -784,22 +843,30 @@ class AuditorViewService(BaseViewService):
                 "retention_policy_status": run.retention_policy_status,
                 "attestation_ref": run.attestation_ref,
                 "evidence_refs": [attestation.ref_code, "runtime-manifest", "retention-checkpoint"] if attestation else [],
-                "benchmark_snapshot_ref": f"Benchmark snapshot {snapshot.id}" if release_ready else None,
+                "benchmark_snapshot_ref": f"Benchmark snapshot {latest_snapshot.id}" if release_ready else None,
                 "release_ref": f"Release run {run.id}" if release_ready else None,
                 "audit_record_id": audit_record.id if audit_record else None,
                 "audit_record_status": audit_record.record_status if audit_record else "not_started",
                 "audit_record_ref": audit_record.canton_record_ref if audit_record and audit_record.record_status == "finalized" else None,
-                "cohort_depth": snapshot.contributor_count if release_ready else None,
+                "cohort_depth": summary_snapshot.contributor_count if release_ready else None,
+                "summary_reliability_score": summary_snapshot.reliability_score,
+                "summary_attested_coverage": summary_snapshot.attested_coverage,
+                "summary_cohort_depth": summary_snapshot.contributor_count,
+                "run_reliability_score": latest_snapshot.reliability_score,
+                "run_attested_coverage": latest_snapshot.attested_coverage,
+                "run_cohort_depth": latest_snapshot.contributor_count,
                 "contribution_mix": f"{len(approved)} approved / {len(submitted)} submitted",
                 "verified_mix": f"{run.valid_submission_count} verified / {run.input_count} processed",
                 "derived_outputs_only": True,
             },
+            snapshot_override=summary_snapshot,
         )
 
     def get_institution_output_audit(self, institution_id: int, output_id: int):
+        context = self._latest_auditor_context(institution_id=institution_id)
         requested_output = self.repo.get_output(output_id)
-        latest_output = self.repo.get_output_for_institution(institution_id)
-        output = latest_output if latest_output.benchmark_snapshot_id > requested_output.benchmark_snapshot_id else requested_output
+        latest_output = context["latest_output"]
+        output = latest_output if latest_output.benchmark_snapshot_id >= requested_output.benchmark_snapshot_id else requested_output
         snapshot = self.repo.get_snapshot(output.benchmark_snapshot_id)
         run = self.repo.get_run(output.processing_run_id)
         release_status = str(run.notes_json.get("release_status", "draft"))
@@ -807,7 +874,7 @@ class AuditorViewService(BaseViewService):
             run.run_status == "released" or release_status in {"approved", "published"}
         )
         release_pending = run.run_status == "release_pending" or release_status == "release_pending"
-        audit_record = self.repo.get_audit_record_for_output(output.id)
+        audit_record = context["latest_record"] if output.id == latest_output.id else self.repo.get_audit_record_for_output(output.id)
         output_context = {
             "selected_institution": self.repo.get_institution(institution_id).name,
             "output_id": output.id if release_ready or release_pending else None,
@@ -822,8 +889,9 @@ class AuditorViewService(BaseViewService):
             "confidence": output.confidence_level if release_ready else None,
             "risk_tier": output.risk_tier if release_ready else None,
             "handoff_readiness": "package_ready" if release_ready else "release_pending" if release_pending else "awaiting_benchmark_release",
-            "record_lifecycle": audit_record.record_status if audit_record and release_ready else "not_ready",
+            "record_lifecycle": audit_record.record_status if audit_record and release_ready else "not_finalized" if release_ready else "not_ready",
             "canton_record_ref": audit_record.canton_record_ref if audit_record and audit_record.record_status == "finalized" else None,
+            "attestation_reference": context["attestation"].ref_code if context["attestation"] else None,
             "generated_at": output.created_at.isoformat() if release_ready else None,
             "released_at": run.finished_at.isoformat() if release_ready and run.finished_at else None,
             "finalized_at": audit_record.recorded_at.isoformat() if audit_record and audit_record.recorded_at and release_ready else None,
@@ -852,25 +920,13 @@ class AuditorViewService(BaseViewService):
         )
 
     def get_audit_record(self, record_id: int):
+        context = self._latest_auditor_context()
         requested_record = self.repo.audit_records.get(record_id)
-        finalized_record = max(
-            (item for item in self.repo.audit_records.values() if item.record_status == "finalized"),
-            key=lambda item: item.id,
-            default=None,
-        )
-        latest_output = self.repo.get_output_for_institution(1)
-        latest_run = self.repo.runs.get(latest_output.processing_run_id)
-        latest_release_status = str(latest_run.notes_json.get("release_status", "draft")) if latest_run else "draft"
-        latest_release_ready = bool(
-            latest_run
-            and latest_output.release_status in {"approved", "published"}
-            and (latest_run.run_status == "released" or latest_release_status in {"approved", "published"})
-        )
-        latest_output_record = self.repo.get_audit_record_for_output(latest_output.id) if latest_release_ready else None
-        record = finalized_record or latest_output_record or requested_record or max(self.repo.audit_records.values(), key=lambda item: item.id)
-        output = latest_output if (finalized_record is None and latest_release_ready) else self.repo.outputs.get(record.institution_output_id or 0)
+        latest_output_record = context["latest_output_record"] if context["release_ready"] else None
+        record = context["latest_record"] or latest_output_record or requested_record or max(self.repo.audit_records.values(), key=lambda item: item.id)
+        output = context["latest_output"] if context["release_ready"] else self.repo.outputs.get(record.institution_output_id or 0)
         snapshot = self.repo.snapshots.get(output.benchmark_snapshot_id) if output else self.repo.snapshots.get(record.benchmark_snapshot_id or 0)
-        run = self.repo.runs.get(output.processing_run_id) if output else None
+        run = self.repo.runs.get(output.processing_run_id) if output else context["latest_run"]
         release_status = str(run.notes_json.get("release_status", "draft")) if run else "draft"
         release_ready = bool(output and run and output.release_status in {"approved", "published"} and (run.run_status == "released" or release_status in {"approved", "published"}))
         finalized = record.record_status == "finalized"
@@ -900,7 +956,11 @@ class AuditorViewService(BaseViewService):
             "benchmark_snapshot_reference": f"Snapshot {snapshot.id}" if snapshot and release_ready else None,
             "run_id": run.id if run else None,
             "release_reference": f"Release run {run.id}" if run and release_ready else None,
-            "attestation_reference": run.attestation_ref or self.repo.attestations[record.attestation_reference_id].ref_code if run else self.repo.attestations[record.attestation_reference_id].ref_code,
+            "attestation_reference": (
+                context["attestation"].ref_code
+                if context["attestation"] and release_ready
+                else self.repo.attestations[record.attestation_reference_id].ref_code
+            ),
             "retention_status": "No raw payload retention",
             "raw_data_exposure": "None",
             "finalized_at": record.recorded_at.isoformat() if finalized and record.recorded_at else None,

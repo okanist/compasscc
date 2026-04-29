@@ -124,12 +124,48 @@ def test_desk_operator_auditor_demo_smoke_flow() -> None:
     snapshot_id = triggered.json()["related_resource_id"]
 
     assert client.get(f"/api/operator/processing/{run_id}").status_code == 200
+    operator_overview_after_trigger = client.get("/api/operator/overview")
+    assert operator_overview_after_trigger.status_code == 200
+    operator_overview_after_trigger_metrics = {
+        item["label"]: item["value"] for item in operator_overview_after_trigger.json()["metrics"]
+    }
+    assert operator_overview_after_trigger_metrics["Contributor Depth"] == "24"
+    assert operator_overview_after_trigger_metrics["Attested Coverage"] == "68%"
+    assert operator_overview_after_trigger_metrics["Benchmark Reliability"] == "91.4%"
+    assert operator_overview_after_trigger_metrics["Pending Validations"] == "0"
+    assert operator_overview_after_trigger_metrics["Processing Health"] == "Release Pending"
+    assert operator_overview_after_trigger_metrics["Release Readiness"] == "Release Pending"
+    operator_processing_after_trigger = client.get(f"/api/operator/processing/{run_id}").json()
+    operator_processing_counts = {item["label"]: item["value"] for item in operator_processing_after_trigger["metrics"]}
+    assert operator_processing_counts["Input Count"] == "3"
+    assert operator_processing_counts["Valid Inputs"] == "2"
+    assert operator_processing_counts["Invalid Inputs"] == "1"
+    stale_processing_route = client.get("/api/operator/processing/1")
+    assert stale_processing_route.status_code == 200
+    stale_processing_payload = stale_processing_route.json()
+    assert stale_processing_payload["run"]["id"] == run_id
+    assert stale_processing_payload["run"]["run_status"] == "release_pending"
+    stale_processing_counts = {item["label"]: item["value"] for item in stale_processing_payload["metrics"]}
+    assert stale_processing_counts["Input Count"] == "3"
+    assert stale_processing_counts["Valid Inputs"] == "2"
+    assert stale_processing_counts["Invalid Inputs"] == "1"
     approved = client.post(f"/api/operator/releases/{run_id}/approve")
     assert approved.status_code == 200
     assert approved.json()["next_state"] == "approved"
     duplicate_approved = client.post(f"/api/operator/releases/{run_id}/approve")
     assert duplicate_approved.status_code == 200
     assert duplicate_approved.json()["next_state"] == "approved"
+    desk_overview_after_release = client.get("/api/desk/overview")
+    assert desk_overview_after_release.status_code == 200
+    desk_overview_after_release_payload = desk_overview_after_release.json()
+    desk_overview_after_release_metrics = {
+        item["label"]: item["value"] for item in desk_overview_after_release_payload["metrics"]
+    }
+    assert desk_overview_after_release_metrics["Benchmark Reliability"] == "91.4%"
+    assert desk_overview_after_release_metrics["Attested Coverage"] == "68%"
+    assert desk_overview_after_release_metrics["Cohort Depth"] == "24 contributors"
+    assert desk_overview_after_release_payload["overview_sections"]["benchmark"]["average_liquidity"] == "73.8"
+    assert desk_overview_after_release_payload["overview_sections"]["benchmark"]["delta"] == "-4.7 pts vs. network average"
     assert client.get("/api/operator/institution-output/1").status_code == 200
     audit_record_after_release = client.get("/api/auditor/audit-records/1")
     assert audit_record_after_release.status_code == 200
@@ -138,6 +174,20 @@ def test_desk_operator_auditor_demo_smoke_flow() -> None:
     assert audit_record_after_release_payload["audit_context"]["finalized"] is False
     assert audit_record_after_release_payload["audit_context"]["lifecycle_message"] == "Institution output is released, but no finalized audit record exists yet."
     assert "Canton-style record finalized" not in audit_record_after_release_payload["audit_trail"]
+    policy_before_record = client.get("/api/auditor/campaigns/1/policy").json()["contribution_policy"]
+    assert policy_before_record["policy_enforcement_state"] == "Enforced / Passing"
+    assert policy_before_record["evidence_context"]["record_lifecycle"] == "not_finalized"
+    assert policy_before_record["evidence_context"]["record_reference"] is None
+    auditor_overview_after_release = client.get("/api/auditor/overview")
+    assert auditor_overview_after_release.status_code == 200
+    auditor_overview_after_release_payload = auditor_overview_after_release.json()
+    auditor_overview_after_release_metrics = {
+        item["label"]: item["value"] for item in auditor_overview_after_release_payload["metrics"]
+    }
+    assert auditor_overview_after_release_metrics["Benchmark Reliability"] == "91.4%"
+    assert auditor_overview_after_release_metrics["Attestation Coverage"] == "68%"
+    assert auditor_overview_after_release_metrics["Record Lifecycle"] == "Not Finalized"
+    assert auditor_overview_after_release_payload["overview_sections"]["auditor"]["record_reference"] is None
 
     operator_output = client.get("/api/operator/institution-output/1").json()
     output_id = operator_output["output"]["id"]
@@ -152,29 +202,54 @@ def test_desk_operator_auditor_demo_smoke_flow() -> None:
     auditor_after_record = client.get("/api/auditor/overview")
     assert auditor_after_record.status_code == 200
     auditor_after_payload = auditor_after_record.json()
-    released_snapshot = client.get(f"/api/auditor/benchmark/{snapshot_id}/audit").json()["snapshot"]
-    expected_reliability = f"{released_snapshot['reliability_score']:.1f}%"
-    expected_coverage = f"{released_snapshot['attested_coverage'] * 100:.0f}%"
     assert auditor_after_payload["overview_sections"]["auditor"]["release_ready"] is True
     assert auditor_after_payload["overview_sections"]["auditor"]["package_available"] is True
-    assert next(item for item in auditor_after_payload["metrics"] if item["label"] == "Benchmark Reliability")["value"] == expected_reliability
-    assert next(item for item in auditor_after_payload["metrics"] if item["label"] == "Attestation Coverage")["value"] == expected_coverage
+    assert next(item for item in auditor_after_payload["metrics"] if item["label"] == "Benchmark Reliability")["value"] == "91.4%"
+    assert next(item for item in auditor_after_payload["metrics"] if item["label"] == "Attestation Coverage")["value"] == "68%"
     assert next(item for item in auditor_after_payload["metrics"] if item["label"] == "Record Lifecycle")["value"] == "Finalized"
+    assert auditor_after_payload["overview_sections"]["auditor"]["latest_run_evidence"]["input_count"] == 3
+    assert auditor_after_payload["overview_sections"]["auditor"]["latest_run_evidence"]["valid_inputs"] == 2
+    assert auditor_after_payload["overview_sections"]["auditor"]["latest_run_evidence"]["invalid_inputs"] == 1
     assert auditor_after_payload["overview_sections"]["auditor"]["record_reference"].startswith("CANTON-REC-")
+    finalized_ref = auditor_after_payload["overview_sections"]["auditor"]["record_reference"]
     policy_after_release = client.get("/api/auditor/campaigns/1/policy").json()["contribution_policy"]
     assert policy_after_release["evidence_context"]["released_cycle"] is True
     assert policy_after_release["policy_enforcement_state"] == "Enforced / Passing"
-    assert policy_after_release["evidence_context"]["record_reference"].startswith("CANTON-REC-")
-    assert client.get(f"/api/auditor/processing/{run_id}/evidence").status_code == 200
-    assert client.get(f"/api/auditor/benchmark/{snapshot_id}/audit").status_code == 200
+    assert policy_after_release["evidence_context"]["record_lifecycle"] == "finalized"
+    assert policy_after_release["evidence_context"]["record_reference"] == finalized_ref
+    processing_evidence = client.get("/api/auditor/processing/1/evidence")
+    assert processing_evidence.status_code == 200
+    processing_evidence_payload = processing_evidence.json()
+    assert processing_evidence_payload["run"]["id"] == run_id
+    assert processing_evidence_payload["run"]["input_count"] == 3
+    assert processing_evidence_payload["run"]["valid_submission_count"] == 2
+    assert processing_evidence_payload["run"]["invalid_submission_count"] == 1
+    benchmark_audit = client.get(f"/api/auditor/benchmark/{snapshot_id}/audit")
+    assert benchmark_audit.status_code == 200
+    benchmark_audit_payload = benchmark_audit.json()
+    assert benchmark_audit_payload["snapshot"]["reliability_score"] == 91.4
+    assert benchmark_audit_payload["snapshot"]["attested_coverage"] == 0.68
+    assert benchmark_audit_payload["snapshot"]["contributor_count"] == 24
+    assert benchmark_audit_payload["benchmark_context"]["snapshot_id"] == snapshot_id
+    assert benchmark_audit_payload["benchmark_context"]["summary_snapshot_id"] == 1
+    assert benchmark_audit_payload["benchmark_context"]["run_id"] == run_id
+    assert benchmark_audit_payload["benchmark_context"]["audit_record_ref"] == finalized_ref
+    assert benchmark_audit_payload["benchmark_context"]["run_cohort_depth"] == 2
     auditor_output = client.get(f"/api/auditor/institution-output/{output_id}")
     assert auditor_output.status_code == 200
-    assert auditor_output.json()["recommended_actions"] == []
+    auditor_output_payload = auditor_output.json()
+    assert auditor_output_payload["recommended_actions"] == []
+    assert auditor_output_payload["output_context"]["record_lifecycle"] == "finalized"
+    assert auditor_output_payload["output_context"]["canton_record_ref"] == finalized_ref
+    assert auditor_output_payload["output_context"]["attestation_reference"] == benchmark_audit_payload["benchmark_context"]["attestation_ref"]
     auditor_record = client.get(f"/api/auditor/audit-records/{record_id}")
     assert auditor_record.status_code == 200
     auditor_record_payload = auditor_record.json()
     assert auditor_record_payload["audit_context"]["finalized"] is True
-    assert auditor_record_payload["audit_context"]["canton_record_ref"].startswith("CANTON-REC-")
+    assert auditor_record_payload["audit_context"]["canton_record_ref"] == finalized_ref
+    assert auditor_record_payload["audit_context"]["output_id"] == output_id
+    assert auditor_record_payload["audit_context"]["run_id"] == run_id
+    assert auditor_record_payload["audit_context"]["attestation_reference"] == benchmark_audit_payload["benchmark_context"]["attestation_ref"]
     assert "Canton-style record finalized" in auditor_record_payload["audit_trail"]
 
 

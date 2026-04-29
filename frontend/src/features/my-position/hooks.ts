@@ -73,6 +73,7 @@ export function useDeskMyPosition(data: PositionData): DeskMyPositionResult {
       setResult({ status: "ready", data: refreshed });
       setRecordStatus("success");
       setRecordMessage(response.message);
+      window.dispatchEvent(new CustomEvent("compass:audit-context-updated"));
     } catch (error) {
       setRecordStatus("error");
       setRecordMessage(error instanceof Error ? error.message : "Record-to-Canton action failed.");

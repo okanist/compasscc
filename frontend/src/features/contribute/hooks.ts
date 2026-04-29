@@ -250,12 +250,10 @@ export function useOperatorContribute(): OperatorContributeResult {
 export function useAuditorContribute(): ViewResult<AuditorContributeData> {
   const [result, setResult] = useState<ViewResult<AuditorContributeData>>({ status: "loading" });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    getAuditorPolicyEvidence(1)
+  const load = useCallback((cancelledRef?: { cancelled: boolean }) => {
+    return getAuditorPolicyEvidence(1)
       .then((payload) => {
-        if (cancelled) {
+        if (cancelledRef?.cancelled) {
           return;
         }
 
@@ -326,15 +324,30 @@ export function useAuditorContribute(): ViewResult<AuditorContributeData> {
         });
       })
       .catch((error: Error) => {
-        if (!cancelled) {
+        if (!cancelledRef?.cancelled) {
           setResult({ status: "error", message: error.message });
         }
       });
+  }, []);
+
+  useEffect(() => {
+    const cancelledRef = { cancelled: false };
+
+    void load(cancelledRef);
+
+    const handleAuditContextUpdated = () => {
+      void load();
+    };
+
+    window.addEventListener("compass:audit-context-updated", handleAuditContextUpdated);
+    window.addEventListener("focus", handleAuditContextUpdated);
 
     return () => {
-      cancelled = true;
+      cancelledRef.cancelled = true;
+      window.removeEventListener("compass:audit-context-updated", handleAuditContextUpdated);
+      window.removeEventListener("focus", handleAuditContextUpdated);
     };
-  }, []);
+  }, [load]);
 
   return result;
 }

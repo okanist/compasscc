@@ -28,7 +28,7 @@ Compass does **not** assume every bank's internal treasury dataset already lives
 
 1. Institutions contribute selected benchmark fields.
 2. Raw institutional positions remain protected.
-3. Confidential computation produces derived benchmark outputs.
+3. A confidential computation boundary produces derived benchmark outputs in production; the MVP simulates this boundary through backend lifecycle state.
 4. Canton/Daml records workflow authority, role-based disclosure, lifecycle state, release control, attestation references, and audit-worthy records.
 
 Analytics remain off-ledger by design. Heavy computation, benchmark scoring, reliability scoring, and projection generation are handled by the FastAPI backend.
@@ -48,6 +48,8 @@ Analytics remain off-ledger by design. Heavy computation, benchmark scoring, rel
 - Role-aware sidebar/navigation and footer identity
 - Lifecycle-aware not-ready, ready, pending, released, and finalized states
 - Auditor projections sanitized to avoid raw data exposure
+- Auditor screens aligned to one latest released/finalized audit context across Audit Overview, Policy Evidence, Benchmark Audit, Output Audit, and Audit Record
+- Stable benchmark summary metrics separated from latest processing-run evidence
 - FastAPI backend with role-specific endpoints
 - Projection-oriented backend services
 - Seed-backed benchmark, processing, institution output, and audit state
@@ -85,6 +87,8 @@ The final validated MVP flow is:
 8. Institution Desk records the released output and receives a Canton-style reference.
 9. Auditor reviews Policy Evidence, Benchmark Audit, Output Audit, and Audit Record.
 
+After the full flow, Auditor screens agree on the same latest finalized audit context: latest released run, latest released institution output, matching attestation reference, and latest Canton-style audit record reference. High-level benchmark summary metrics remain stable at the campaign/reference level, while run-level counts and low-confidence processing evidence stay in processing evidence sections.
+
 The demo can be reset through:
 
 ```bash
@@ -121,11 +125,23 @@ The product flow is organized around role-specific screens:
 
 ### Auditor
 
-- **Audit Overview**: Reviews released/finalized state and high-level evidence status.
-- **Policy Evidence**: Reviews contribution policy evidence and attestation rules.
-- **Benchmark Audit**: Reviews benchmark release audit, construction quality, and processing evidence subsection.
-- **Output Audit**: Reviews institution-scoped output audit state and release-approved package metadata.
-- **Audit Record**: Reviews finalized Canton-style audit record references and audit trail events.
+- **Audit Overview**: Reviews released/finalized state, high-level audit readiness, stable benchmark reliability, attestation coverage, release scope, retention compliance, and record lifecycle.
+- **Policy Evidence**: Reviews contribution policy evidence, attestation rules, retention controls, and the latest finalized record reference when available.
+- **Benchmark Audit**: Reviews benchmark release audit and construction quality using stable campaign benchmark summary metrics, with latest run evidence isolated in the Processing Evidence subsection.
+- **Output Audit**: Reviews the latest institution-scoped derived output, release eligibility, handoff readiness, record lifecycle, and read-only Canton-style reference.
+- **Audit Record**: Reviews finalized Canton-style audit record references, matching attestation/reference fields, lifecycle state, and audit trail events.
+
+For the finalized demo state, Auditor summary screens show:
+
+- Benchmark reliability: `91.4%`
+- Attestation coverage: `68%`
+- Cohort depth: `24 contributors`
+- Release scope: `Derived outputs only`
+- Retention compliance: `Enforced`
+- Record lifecycle: `Finalized`
+- Canton-style record reference: latest finalized `CANTON-REC-...`
+
+Latest run evidence such as run id, input count, valid/invalid counts, and run-level snapshot values remains visible only where explicitly labeled as processing or run evidence.
 
 ---
 
@@ -143,7 +159,7 @@ A bank-side connector would extract only the selected benchmark fields required 
 | Exact maturity profile | Maturity bucket |
 | Liquidity inputs | Policy-normalized benchmark field |
 
-The result is a **contribution package**, not a raw position dump. The package may be self-reported, system-signed, or policy-recognized externally attested.
+The result is a **contribution package**, not a raw position dump. The package may be self-reported, system-signed, or marked under a policy-recognized attestation class.
 
 In production, this package would be sent into a confidential compute or TEE boundary for deterministic benchmark computation. The boundary would perform policy validation, field eligibility checks, trust weighting, cohort aggregation, outlier handling, benchmark score calculation, reliability scoring, and institution-scoped comparison.
 
@@ -174,7 +190,7 @@ Prepared contribution package
   -> Canton-style audit reference
 ```
 
-Canton recording is represented by a Canton-style reference such as `CANTON-REC-0001` or `CANTON-REC-0002`. Live Daml command submission, Canton event ingestion, and production TEE integration are future integration seams.
+Canton recording is represented by a Canton-style reference such as `CANTON-REC-0001` or `CANTON-REC-0002`. In the MVP, "Record to Canton" finalizes a Canton-style audit reference rather than submitting a live Daml command. Live Daml command submission, Canton event ingestion, and production TEE integration are future integration seams.
 
 ---
 
@@ -207,6 +223,9 @@ Final Auditor projections are sanitized:
 - No payload dumps
 - Auditor screens expose audit metadata, release scope, references, lifecycle state, and derived output summaries only
 - Release scope is **derived outputs only**
+- Audit Overview and Benchmark Audit release summaries use stable benchmark/campaign metrics, not raw or run-level input counts
+- Run-level evidence is labeled separately and limited to processing metadata such as run id, input count, valid/invalid counts, runtime mode, retention policy, and attestation references
+- Policy Evidence and evidence package modals render readable key/value rows and do not include raw payload fields
 
 Operators do not receive raw peer breakdowns. Institution Desk sees only its own prepared contribution package and its own institution-scoped derived output.
 
@@ -336,6 +355,10 @@ Backend smoke tests cover:
 - Institution Desk read, submit, processing, benchmark, position, and record flow
 - Operator overview, pending submission review, processing trigger, release approval, and institution output review
 - Auditor overview, policy evidence, benchmark audit, output audit, and audit record detail
+- Auditor cross-screen finalized context consistency for record reference, output id, run id, attestation reference, and lifecycle state
+- Stable Auditor benchmark summary metrics after new processing run release
+- Run-level evidence isolation in processing-specific projections
+- Policy Evidence and Auditor evidence modal key/value formatting
 
 ---
 

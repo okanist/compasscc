@@ -74,27 +74,47 @@ export function AuditorContributeView({ onNavigate }: AuditorContributeViewProps
                     or peer contribution values are included.
                   </p>
                 </div>
-                <div className="confirmation-modal__summary">
-                  <span>Campaign</span>
-                  <strong>{data.evidenceContext.campaignTitle ?? "Active campaign"}</strong>
-                  <span>Scenario</span>
-                  <strong>{data.evidenceContext.scenario ?? "Active scenario"}</strong>
-                  <span>Policy Status</span>
-                  <strong>{data.evidenceContext.policyStatus ?? "Active"}</strong>
-                  <span>Accepted Classes</span>
-                  <strong>{data.evidenceContext.acceptedClassesCount ?? data.classes.length}</strong>
-                  <span>Submitted Packages</span>
-                  <strong>{data.evidenceContext.submittedPackages ?? 0}</strong>
-                  <span>Pending Reviews</span>
-                  <strong>{data.evidenceContext.pendingReviews ?? 0}</strong>
-                  <span>Released Cycle</span>
-                  <strong>{data.evidenceContext.releasedCycle ? "Yes" : "No"}</strong>
-                  <span>Raw Data Exposure</span>
-                  <strong>None</strong>
-                  <span>Record Lifecycle</span>
-                  <strong>{String(data.evidenceContext.recordLifecycle ?? "not_finalized").replace(/_/g, " ")}</strong>
-                  <span>Record Reference</span>
-                  <strong>{data.evidenceContext.recordReference ?? "Pending"}</strong>
+                <div className="confirmation-summary">
+                  <div>
+                    <span>Campaign</span>
+                    <strong>{data.evidenceContext.campaignTitle ?? "Active campaign"}</strong>
+                  </div>
+                  <div>
+                    <span>Scenario</span>
+                    <strong>{data.evidenceContext.scenario ?? "Active scenario"}</strong>
+                  </div>
+                  <div>
+                    <span>Policy Status</span>
+                    <strong>{data.evidenceContext.policyStatus ?? "Active"}</strong>
+                  </div>
+                  <div>
+                    <span>Accepted Classes</span>
+                    <strong>{data.evidenceContext.acceptedClassesCount ?? data.classes.length}</strong>
+                  </div>
+                  <div>
+                    <span>Submitted Packages</span>
+                    <strong>{data.evidenceContext.submittedPackages ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Pending Reviews</span>
+                    <strong>{data.evidenceContext.pendingReviews ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Released Cycle</span>
+                    <strong>{data.evidenceContext.releasedCycle ? "Yes" : "No"}</strong>
+                  </div>
+                  <div>
+                    <span>Raw Data Exposure</span>
+                    <strong>None</strong>
+                  </div>
+                  <div>
+                    <span>Record Lifecycle</span>
+                    <strong>{String(data.evidenceContext.recordLifecycle ?? "not_finalized").replace(/_/g, " ")}</strong>
+                  </div>
+                  <div>
+                    <span>Record Reference</span>
+                    <strong>{data.evidenceContext.recordReference ?? "Pending"}</strong>
+                  </div>
                 </div>
                 <div className="confirmation-modal__actions">
                   <button type="button" className="secondary-button" onClick={() => setIsEvidenceOpen(false)}>

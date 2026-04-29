@@ -233,6 +233,7 @@ export function useAuditorBenchmark(): ViewResult<AuditorBenchmarkData> {
               { label: "Handoff Readiness", value: handoffReadiness, detail: "Release-approved output package state" },
               { label: "Record Lifecycle", value: recordLifecycle, detail: "Read-only record lifecycle" },
               { label: "Canton-style Record Reference", value: cantonRef, detail: context.canton_record_ref ? "Finalized read-only evidence reference" : "Appears after Institution Desk records to Canton" },
+              { label: "Attestation Reference", value: context.attestation_reference ?? "Pending", detail: "Released processing attestation reference" },
               { label: "Generated", value: generatedAt, detail: "Generated output timestamp" },
               { label: "Released", value: releasedAt, detail: "Release approval timestamp" },
               { label: "Finalized", value: finalizedAt, detail: "Record finalization timestamp" }
@@ -246,12 +247,14 @@ export function useAuditorBenchmark(): ViewResult<AuditorBenchmarkData> {
               { label: "Selected Institution", value: context.selected_institution ?? "Alpha Bank", detail: "Auditor-safe institution scope" },
               { label: "Output Package", value: outputReady ? "Release-approved output package" : releasePending ? "Release-gated output package" : "Awaiting benchmark release", detail: outputReady ? `Output ${outputId}` : context.not_ready_message },
               { label: "Benchmark Reference", value: benchmarkReference, detail: "Benchmark snapshot linkage" },
+              { label: "Attestation Reference", value: context.attestation_reference ?? "Pending", detail: "Consistent released run evidence reference" },
               { label: "Record Lifecycle", value: recordLifecycle, detail: "No Record to Canton control exposed to Auditor" },
               { label: "Canton-style Record Reference", value: cantonRef, detail: "Read-only finalized reference when available" },
               { label: "Disclosure Boundary", value: "No raw institutional contribution data", detail: "No raw peer positions or named peer breakdowns" }
             ],
             evidenceRefs: [
               context.benchmark_reference ? `Benchmark reference: ${context.benchmark_reference}` : undefined,
+              context.attestation_reference ? `Attestation reference: ${context.attestation_reference}` : undefined,
               outputReady ? `Output reference: Output ${outputId}` : undefined,
               context.canton_record_ref ? `Audit record reference: ${context.canton_record_ref}` : undefined,
             ].filter(Boolean) as string[],

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionCard } from "../../../components/SectionCard";
 import type { NavKey } from "../../../data/types";
 import { RoleListSection, RoleMetricGrid } from "../../../components/primitives/RoleViewSections";
@@ -86,12 +86,12 @@ export function AuditorAuditRecordView({ onNavigate }: AuditorAuditRecordViewPro
                     peer positions, named peer breakdowns, and payload dumps are excluded.
                   </p>
                 </div>
-                <div className="confirmation-modal__summary">
+                <div className="confirmation-summary">
                   {data.recordPackage.map((metric) => (
-                    <Fragment key={metric.label}>
+                    <div key={metric.label}>
                       <span>{metric.label}</span>
                       <strong>{metric.value}</strong>
-                    </Fragment>
+                    </div>
                   ))}
                 </div>
                 <div className="confirmation-modal__actions">

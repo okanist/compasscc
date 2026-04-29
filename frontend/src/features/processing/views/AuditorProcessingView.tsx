@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { SectionCard } from "../../../components/SectionCard";
 import type { NavKey } from "../../../data/types";
 import { RoleListSection, RoleMetricGrid } from "../../../components/primitives/RoleViewSections";
@@ -97,12 +97,12 @@ export function AuditorProcessingView({ onNavigate }: AuditorProcessingViewProps
                     and package payloads are excluded.
                   </p>
                 </div>
-                <div className="confirmation-modal__summary">
+                <div className="confirmation-summary">
                   {data.evidencePackage.map((metric) => (
-                    <Fragment key={metric.label}>
+                    <div key={metric.label}>
                       <span>{metric.label}</span>
                       <strong>{metric.value}</strong>
-                    </Fragment>
+                    </div>
                   ))}
                 </div>
                 <div className="confirmation-modal__actions">

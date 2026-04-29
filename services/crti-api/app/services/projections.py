@@ -144,8 +144,9 @@ class ProjectionFactory:
         actions: list[ActionDTO],
         benchmark_context: dict | None = None,
         expose_outputs: bool = True,
+        snapshot_override=None,
     ) -> BenchmarkProjection:
-        snapshot = self.repo.get_snapshot_by_scenario(scenario)
+        snapshot = snapshot_override or self.repo.get_snapshot_by_scenario(scenario)
         if not expose_outputs:
             return BenchmarkProjection(
                 snapshot=None,
